@@ -79,9 +79,10 @@ vi.mock('@thunderid/hooks', () => ({
 }));
 
 // Mock useConfig
+const mockGetServerUrl = vi.fn().mockReturnValue('https://api.example.com');
 vi.mock('@thunderid/contexts', () => ({
   useConfig: () => ({
-    getServerUrl: () => 'https://api.example.com',
+    getServerUrl: mockGetServerUrl,
   }),
 }));
 
@@ -135,6 +136,8 @@ let mockAcceptInviteRenderProps: MockAcceptInviteRenderProps = createMockAcceptI
 let capturedOnGoToSignIn: (() => void) | undefined;
 let capturedOnComplete: (() => void) | undefined;
 let capturedOnError: ((error: Error) => void) | undefined;
+let capturedOnFlowChange: ((response: {failureReason?: string}) => void) | undefined;
+let capturedBaseUrl: string | undefined;
 const mockUseThunderID = vi.fn().mockReturnValue({
   resolveFlowTemplateLiterals: (template: string) => template,
 });
@@ -146,18 +149,24 @@ vi.mock('@thunderid/react', async () => {
     useThunderID: () => mockUseThunderID() as {resolveFlowTemplateLiterals: (t: string) => string; meta: unknown},
     AcceptInvite: ({
       children,
+      baseUrl = undefined,
       onGoToSignIn = undefined,
       onComplete = undefined,
       onError = undefined,
+      onFlowChange = undefined,
     }: {
       children: (props: typeof mockAcceptInviteRenderProps) => React.ReactNode;
+      baseUrl?: string;
       onGoToSignIn?: () => void;
       onComplete?: () => void;
       onError?: (error: Error) => void;
+      onFlowChange?: (response: {failureReason?: string}) => void;
     }) => {
+      capturedBaseUrl = baseUrl;
       capturedOnGoToSignIn = onGoToSignIn;
       capturedOnComplete = onComplete;
       capturedOnError = onError;
+      capturedOnFlowChange = onFlowChange;
       return <div data-testid="thunderid-accept-invite">{children(mockAcceptInviteRenderProps)}</div>;
     },
     EmbeddedFlowComponentType: {
@@ -183,6 +192,7 @@ describe('AcceptInviteBox', () => {
     mockUseDesign.mockReturnValue({
       isDesignEnabled: false,
     });
+    mockGetServerUrl.mockReturnValue('https://api.example.com');
     mockAcceptInviteRenderProps = createMockAcceptInviteRenderProps();
   });
 
@@ -1415,5 +1425,56 @@ describe('AcceptInviteBox', () => {
     });
     render(<AcceptInviteBox />);
     expect(screen.getByTestId('thunderid-accept-invite')).toBeInTheDocument();
+  });
+
+  it('passes getServerUrl result as baseUrl when non-null', () => {
+    render(<AcceptInviteBox />);
+    expect(capturedBaseUrl).toBe('https://api.example.com');
+  });
+
+  it('falls back to VITE_THUNDER_BASE_URL as baseUrl when getServerUrl returns null', () => {
+    mockGetServerUrl.mockReturnValue(null);
+    render(<AcceptInviteBox />);
+    expect(capturedBaseUrl).toBe(import.meta.env.VITE_THUNDER_BASE_URL as string);
+  });
+
+  it('shows flowError when onFlowChange is called with a failureReason', async () => {
+    mockAcceptInviteRenderProps = createMockAcceptInviteRenderProps({
+      components: [{id: 'block', type: 'BLOCK', components: []}],
+    });
+    render(<AcceptInviteBox />);
+
+    expect(capturedOnFlowChange).toBeDefined();
+    capturedOnFlowChange?.({failureReason: 'Flow failed due to policy'});
+
+    expect(await screen.findByText('Flow failed due to policy')).toBeInTheDocument();
+  });
+
+  it('clears flowError when onFlowChange is called without failureReason', async () => {
+    mockAcceptInviteRenderProps = createMockAcceptInviteRenderProps({
+      components: [{id: 'block', type: 'BLOCK', components: []}],
+    });
+    render(<AcceptInviteBox />);
+
+    capturedOnFlowChange?.({failureReason: 'Initial error'});
+    expect(await screen.findByText('Initial error')).toBeInTheDocument();
+
+    capturedOnFlowChange?.({});
+    await waitFor(() => {
+      expect(screen.queryByText('Initial error')).not.toBeInTheDocument();
+    });
+  });
+
+  it('prefers flowError over error.message in the alert', async () => {
+    mockAcceptInviteRenderProps = createMockAcceptInviteRenderProps({
+      error: {message: 'SDK error'},
+      components: [{id: 'block', type: 'BLOCK', components: []}],
+    });
+    render(<AcceptInviteBox />);
+
+    capturedOnFlowChange?.({failureReason: 'Flow error'});
+
+    expect(await screen.findByText('Flow error')).toBeInTheDocument();
+    expect(screen.queryByText('SDK error')).not.toBeInTheDocument();
   });
 });
