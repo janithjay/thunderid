@@ -146,7 +146,7 @@ const ProtectedRoute: FC<ProtectedRouteProps> = ({
   redirectTo,
   loader = null,
   onSignIn,
-  signInOptions: overriddenSignInOptions = {},
+  signInOptions: overriddenSignInOptions,
 }: ProtectedRouteProps) => {
   const {isSignedIn, isLoading, signIn, signInOptions, signInUrl} = useThunderID();
 

@@ -77,7 +77,7 @@ const SignInButton: ForwardRefExoticComponent<SignInButtonProps & RefAttributes<
   SignInButtonProps
 >(
   (
-    {children, onClick, preferences, signInOptions: overriddenSignInOptions = {}, ...rest}: SignInButtonProps,
+    {children, onClick, preferences, signInOptions: overriddenSignInOptions, ...rest}: SignInButtonProps,
     ref: Ref<HTMLButtonElement>,
   ): ReactElement => {
     const {signIn, signInUrl, signInOptions, meta} = useThunderID();
