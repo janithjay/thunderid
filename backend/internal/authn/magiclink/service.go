@@ -162,6 +162,7 @@ func (s *magicLinkAuthnService) Authenticate(ctx context.Context,
 	return &MagicLinkAuthnResult{InternalEntity: user}, nil
 }
 
+// verifyToken checks the validity of the provided JWT token and returns service errors for invalid or expired tokens.
 func (s *magicLinkAuthnService) verifyToken(ctx context.Context, token string) *serviceerror.ServiceError {
 	issuer := config.GetServerRuntime().Config.JWT.Issuer
 	verifyErr := s.jwtService.VerifyJWT(ctx, token, tokenAudience, issuer)
@@ -175,6 +176,8 @@ func (s *magicLinkAuthnService) verifyToken(ctx context.Context, token string) *
 	return nil
 }
 
+// extractSubject retrieves the subject claim from the JWT token payload and returns it as a string.
+// along with any service errors encountered during decoding or extraction.
 func (s *magicLinkAuthnService) extractSubject(ctx context.Context, token string) (string, *serviceerror.ServiceError) {
 	payload, decodeErr := jwt.DecodeJWTPayload(token)
 	if decodeErr != nil {
@@ -233,7 +236,7 @@ func (s *magicLinkAuthnService) buildMagicLinkURL(ctx context.Context, magicLink
 	}
 
 	if u == nil {
-		u = config.GetServerRuntime().GateClientLoginURL
+		u = config.GetServerRuntime().GateClientCallbackURL
 	}
 
 	q := u.Query()

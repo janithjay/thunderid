@@ -71,6 +71,7 @@ export default defineConfig({
       // when using linked packages
       react: resolve(__dirname, './node_modules/react'),
       'react-dom': resolve(__dirname, './node_modules/react-dom'),
+      'react-router': resolve(__dirname, './node_modules/react-router'),
     },
   },
   plugins: [

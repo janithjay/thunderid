@@ -50,7 +50,6 @@ import {extractErrorMessage, normalizeFlowResponse} from '../../../../utils/v2/f
 import {handlePasskeyAuthentication, handlePasskeyRegistration} from '../../../../utils/v2/passkey';
 
 const EXECUTION_ID_STORAGE_KEY = 'thunderid_execution_id';
-const AUTH_ID_STORAGE_KEY = 'thunderid_auth_id';
 
 interface PasskeyState {
   actionId: string | null;
@@ -114,7 +113,15 @@ const SignIn: Component = defineComponent({
     props: Readonly<{className: string; size: 'small' | 'medium' | 'large'; variant: 'elevated' | 'outlined' | 'flat'}>,
     {slots, emit, attrs}: SetupContext,
   ): () => VNode | null {
-    const {applicationId, afterSignInUrl, signIn, isInitialized, isLoading: sdkLoading, scopes} = useThunderID();
+    const {
+      applicationId,
+      afterSignInUrl,
+      signIn,
+      isInitialized,
+      isLoading: sdkLoading,
+      scopes,
+      getStorageManager,
+    } = useThunderID();
     const {meta: flowMeta} = useFlowMeta();
     const {t} = useI18n();
 
@@ -151,10 +158,13 @@ const SignIn: Component = defineComponent({
       }
     };
 
-    const clearFlowState = (): void => {
+    const clearFlowState = async (): Promise<void> => {
       persistExecutionId(null);
       isFlowInitialized.value = false;
-      sessionStorage.removeItem(AUTH_ID_STORAGE_KEY);
+      const sm = getStorageManager();
+      if (sm) {
+        await sm.removeHybridDataParameter('authId');
+      }
       isTimeoutDisabled.value = false;
       oauthCodeProcessedFlag.value = false;
     };
@@ -212,7 +222,10 @@ const SignIn: Component = defineComponent({
       oauthCodeProcessedFlag.value = false;
 
       if (urlParams.authId) {
-        sessionStorage.setItem(AUTH_ID_STORAGE_KEY, urlParams.authId);
+        const sm = getStorageManager();
+        if (sm) {
+          await sm.setHybridDataParameter('authId', urlParams.authId);
+        }
       }
 
       const effectiveApplicationId: string | null | undefined = applicationId || urlParams.applicationId;
@@ -247,7 +260,12 @@ const SignIn: Component = defineComponent({
           const redirectURL: string | undefined = (response.data as any)?.redirectURL || (response as any)?.redirectURL;
           if (redirectURL && window?.location) {
             if (response.executionId) persistExecutionId(response.executionId);
-            if (urlParams.authId) sessionStorage.setItem(AUTH_ID_STORAGE_KEY, urlParams.authId);
+            if (urlParams.authId) {
+              const sm = getStorageManager();
+              if (sm) {
+                await sm.setHybridDataParameter('authId', urlParams.authId);
+              }
+            }
             initiateOAuthRedirect(redirectURL);
             return;
           }
@@ -346,7 +364,12 @@ const SignIn: Component = defineComponent({
           if (redirectURL && window?.location) {
             if (response.executionId) persistExecutionId(response.executionId);
             const urlParams: UrlParams = getUrlParams();
-            if (urlParams.authId) sessionStorage.setItem(AUTH_ID_STORAGE_KEY, urlParams.authId);
+            if (urlParams.authId) {
+              const sm = getStorageManager();
+              if (sm) {
+                await sm.setHybridDataParameter('authId', urlParams.authId);
+              }
+            }
             initiateOAuthRedirect(redirectURL);
             return;
           }
@@ -394,7 +417,10 @@ const SignIn: Component = defineComponent({
           isSubmitting.value = false;
           persistExecutionId(null);
           isFlowInitialized.value = false;
-          sessionStorage.removeItem(AUTH_ID_STORAGE_KEY);
+          const sm = getStorageManager();
+          if (sm) {
+            await sm.removeHybridDataParameter('authId');
+          }
           cleanupOAuthUrlParams();
 
           emit('success', {
@@ -543,11 +569,14 @@ const SignIn: Component = defineComponent({
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
-    onMounted(() => {
+    onMounted(async () => {
       const urlParams: UrlParams = getUrlParams();
 
       if (urlParams.authId) {
-        sessionStorage.setItem(AUTH_ID_STORAGE_KEY, urlParams.authId);
+        const sm = getStorageManager();
+        if (sm) {
+          await sm.setHybridDataParameter('authId', urlParams.authId);
+        }
       }
     });
 

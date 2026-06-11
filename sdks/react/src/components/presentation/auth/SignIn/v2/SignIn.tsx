@@ -217,7 +217,8 @@ const SignIn: FC<SignInProps> = ({
   variant,
   children,
 }: SignInProps): ReactElement => {
-  const {applicationId, afterSignInUrl, signIn, isInitialized, isLoading, meta, getStorageManager, scopes} = useThunderID();
+  const {applicationId, afterSignInUrl, signIn, isInitialized, isLoading, meta, getStorageManager, scopes} =
+    useThunderID();
   const {t} = useTranslation(preferences?.i18n);
 
   // State management for the flow
@@ -301,7 +302,12 @@ const SignIn: FC<SignInProps> = ({
     setExecutionId(null);
     await setChallengeToken(null);
     setIsFlowInitialized(false);
-    sessionStorage.removeItem('thunderid_auth_id');
+    try {
+      const storageManager: any = await getStorageManager();
+      await storageManager?.removeHybridDataParameter?.('authId');
+    } catch {
+      logger.warn('Failed to clear authId from hybrid storage.');
+    }
     setIsTimeoutDisabled(false);
     // Reset refs to allow new flows to start properly
     oauthCodeProcessedRef.current = false;
@@ -328,9 +334,14 @@ const SignIn: FC<SignInProps> = ({
   /**
    * Handle authId from URL and store it in sessionStorage.
    */
-  const handleAuthId = (authId: string | null): void => {
+  const handleAuthId = async (authId: string | null): Promise<void> => {
     if (authId) {
-      sessionStorage.setItem('thunderid_auth_id', authId);
+      try {
+        const storageManager: any = await getStorageManager();
+        await storageManager?.setHybridDataParameter?.('authId', authId);
+      } catch {
+        logger.warn('Failed to store authId in hybrid storage.');
+      }
     }
   };
 
@@ -440,6 +451,7 @@ const SignIn: FC<SignInProps> = ({
       if (urlParams.executionId) {
         response = (await signIn({
           executionId: urlParams.executionId,
+          ...(challengeTokenRef.current ? {challengeToken: challengeTokenRef.current} : {}),
         })) as EmbeddedSignInFlowResponseV2;
       } else {
         response = (await signIn({
@@ -510,6 +522,7 @@ const SignIn: FC<SignInProps> = ({
     if (
       isInitialized &&
       !isLoading &&
+      isStorageReady &&
       !isFlowInitialized &&
       !initializationAttemptedRef.current &&
       !currentExecutionId &&
@@ -521,7 +534,7 @@ const SignIn: FC<SignInProps> = ({
       initializationAttemptedRef.current = true;
       initializeFlow();
     }
-  }, [isInitialized, isLoading, isFlowInitialized, currentExecutionId]);
+  }, [isInitialized, isLoading, isStorageReady, isFlowInitialized, currentExecutionId]);
 
   /**
    * Handle step timeout if configured in additionalData.
@@ -707,7 +720,12 @@ const SignIn: FC<SignInProps> = ({
         await setChallengeToken(null);
         setIsFlowInitialized(false);
         sessionStorage.removeItem('thunderid_execution_id');
-        sessionStorage.removeItem('thunderid_auth_id');
+        try {
+          const storageManager: any = await getStorageManager();
+          await storageManager?.removeHybridDataParameter?.('authId');
+        } catch {
+          logger.warn('Failed to clear authId from hybrid storage after completion.');
+        }
 
         // Clean up OAuth URL params before redirect
         cleanupOAuthUrlParams(true);
