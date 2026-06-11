@@ -31,9 +31,10 @@ import (
 
 // ServerRuntime holds the runtime configuration for the server.
 type ServerRuntime struct {
-	ServerHome         string `yaml:"server_home"`
-	GateClientLoginURL *url.URL
-	Config             Config `yaml:"config"`
+	ServerHome            string `yaml:"server_home"`
+	GateClientLoginURL    *url.URL
+	GateClientCallbackURL *url.URL
+	Config                Config `yaml:"config"`
 }
 
 var (
@@ -47,6 +48,10 @@ func InitializeServerRuntime(serverHome string, config *Config) error {
 		loginPath := config.GateClient.LoginPath
 		if strings.TrimSpace(loginPath) == "" {
 			loginPath = "/signin"
+		}
+		callbackPath := config.GateClient.CallbackPath
+		if strings.TrimSpace(callbackPath) == "" {
+			callbackPath = "/callback"
 		}
 
 		portStr := strconv.Itoa(config.GateClient.Port)
@@ -68,12 +73,24 @@ func InitializeServerRuntime(serverHome string, config *Config) error {
 			parsedPath = &url.URL{Path: "/signin"}
 		}
 
+		parsedCallbackPath, err := url.Parse(callbackPath)
+		if err != nil || parsedCallbackPath == nil {
+			log.GetLogger().Warn(
+				"Invalid gate client callback path configured. Falling back to default '/callback'",
+				log.String("configuredPath", callbackPath),
+				log.Error(err),
+			)
+			parsedCallbackPath = &url.URL{Path: "/callback"}
+		}
+
 		parsedURL := baseURL.ResolveReference(parsedPath)
+		parsedCallbackURL := baseURL.ResolveReference(parsedCallbackPath)
 
 		runtimeConfig = &ServerRuntime{
-			ServerHome:         serverHome,
-			GateClientLoginURL: parsedURL,
-			Config:             *config,
+			ServerHome:            serverHome,
+			GateClientLoginURL:    parsedURL,
+			GateClientCallbackURL: parsedCallbackURL,
+			Config:                *config,
 		}
 	})
 	return nil

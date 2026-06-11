@@ -61,19 +61,31 @@ const SignUp: FC<SignUpProps> = ({
   /**
    * Initialize the sign-up flow.
    */
-  const handleInitialize = async (
-    payload?: EmbeddedSignUpFlowRequestV2,
-  ): Promise<EmbeddedSignUpFlowResponseV2> => {
+  const handleInitialize = async (payload?: EmbeddedSignUpFlowRequestV2): Promise<EmbeddedSignUpFlowResponseV2> => {
     const urlParams: URLSearchParams = new URL(window.location.href).searchParams;
+    const executionIdFromUrl: string = urlParams.get('executionId') || '';
     const applicationIdFromUrl: string = urlParams.get('applicationId') ?? '';
 
     const effectiveApplicationId: any = applicationId ?? applicationIdFromUrl;
 
-    const initialPayload: EmbeddedSignUpFlowRequestV2 = payload ?? {
-      flowType: EmbeddedFlowType.Registration,
-      ...(effectiveApplicationId && {applicationId: effectiveApplicationId}),
-      ...(scopes && {scopes}),
-    };
+    const challengeToken: string | undefined = (payload as any)?.challengeToken;
+
+    let initialPayload: EmbeddedSignUpFlowRequestV2 | any;
+    if (executionIdFromUrl) {
+      initialPayload = {
+        executionId: executionIdFromUrl,
+        ...(challengeToken ? {challengeToken} : {}),
+      };
+    } else if (!payload || !('flowType' in payload)) {
+      initialPayload = {
+        ...(payload || {}),
+        flowType: EmbeddedFlowType.Registration,
+        ...(effectiveApplicationId && {applicationId: effectiveApplicationId}),
+        ...(scopes && {scopes}),
+      };
+    } else {
+      initialPayload = payload;
+    }
 
     return (await signUp(initialPayload)) as EmbeddedSignUpFlowResponseV2;
   };
@@ -94,8 +106,9 @@ const SignUp: FC<SignUpProps> = ({
       return;
     }
 
-    const redirectURL: string | undefined =
-      (response?.data as Record<string, unknown>)?.['redirectURL'] as string | undefined;
+    const redirectURL: string | undefined = (response?.data as Record<string, unknown>)?.['redirectURL'] as
+      | string
+      | undefined;
 
     if (
       response?.type === EmbeddedSignUpFlowTypeV2.Redirection &&
@@ -115,11 +128,7 @@ const SignUp: FC<SignUpProps> = ({
 
     // For non-redirection responses (regular sign-up completion), handle redirect if configured.
     // Skip when assertion is present — the SDK stored the session and the caller handled navigation.
-    if (
-      response?.type !== EmbeddedSignUpFlowTypeV2.Redirection &&
-      afterSignUpUrl &&
-      !(response as any)?.assertion
-    ) {
+    if (response?.type !== EmbeddedSignUpFlowTypeV2.Redirection && afterSignUpUrl && !(response as any)?.assertion) {
       window.location.href = afterSignUpUrl;
     }
   };

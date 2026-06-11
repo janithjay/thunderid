@@ -17,9 +17,9 @@
  */
 
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import generateFallbackSignUpUrl from '../generateFallbackSignUpUrl';
+import generateFallbackSignInUrl from '../generateFallbackSignInUrl';
 
-describe('generateFallbackSignUpUrl', () => {
+describe('generateFallbackSignInUrl', () => {
   let originalBaseUrl: string;
 
   beforeEach(() => {
@@ -31,32 +31,32 @@ describe('generateFallbackSignUpUrl', () => {
   });
 
   describe('base URL handling', () => {
-    it('should produce a URL that ends with the sign-up path when BASE_URL has a trailing slash', () => {
+    it('should produce a URL that ends with the sign-in path when BASE_URL has a trailing slash', () => {
       import.meta.env.BASE_URL = '/gate/';
-      const result = generateFallbackSignUpUrl(new URLSearchParams());
+      const result = generateFallbackSignInUrl(new URLSearchParams());
 
-      expect(result).toBe('/gate/signup');
+      expect(result).toBe('/gate/signin');
     });
 
-    it('should produce a URL that ends with the sign-up path when BASE_URL has no trailing slash', () => {
+    it('should produce a URL that ends with the sign-in path when BASE_URL has no trailing slash', () => {
       import.meta.env.BASE_URL = '/gate';
-      const result = generateFallbackSignUpUrl(new URLSearchParams());
+      const result = generateFallbackSignInUrl(new URLSearchParams());
 
-      expect(result).toBe('/gate/signup');
+      expect(result).toBe('/gate/signin');
     });
 
     it('should handle a root BASE_URL with trailing slash', () => {
       import.meta.env.BASE_URL = '/';
-      const result = generateFallbackSignUpUrl(new URLSearchParams());
+      const result = generateFallbackSignInUrl(new URLSearchParams());
 
-      expect(result).toBe('/signup');
+      expect(result).toBe('/signin');
     });
 
     it('should handle an empty BASE_URL', () => {
       import.meta.env.BASE_URL = '';
-      const result = generateFallbackSignUpUrl(new URLSearchParams());
+      const result = generateFallbackSignInUrl(new URLSearchParams());
 
-      expect(result).toBe('/signup');
+      expect(result).toBe('/signin');
     });
   });
 
@@ -64,25 +64,25 @@ describe('generateFallbackSignUpUrl', () => {
     it('should append a single query parameter', () => {
       import.meta.env.BASE_URL = '/gate/';
       const params = new URLSearchParams({client_id: 'abc'});
-      const result = generateFallbackSignUpUrl(params);
+      const result = generateFallbackSignInUrl(params);
 
-      expect(result).toBe('/gate/signup?client_id=abc');
+      expect(result).toBe('/gate/signin?client_id=abc');
     });
 
     it('should append multiple query parameters', () => {
       import.meta.env.BASE_URL = '/gate/';
       const params = new URLSearchParams({client_id: 'abc', redirect_uri: 'https://example.com/callback'});
-      const result = generateFallbackSignUpUrl(params);
+      const result = generateFallbackSignInUrl(params);
 
       // URLSearchParams serialises in insertion order.
-      expect(result).toContain('/gate/signup?');
+      expect(result).toContain('/gate/signin?');
       expect(result).toContain('client_id=abc');
       expect(result).toContain('redirect_uri=');
     });
 
     it('should not append a "?" when there are no query params', () => {
       import.meta.env.BASE_URL = '/gate/';
-      const result = generateFallbackSignUpUrl(new URLSearchParams());
+      const result = generateFallbackSignInUrl(new URLSearchParams());
 
       expect(result).not.toContain('?');
     });
@@ -95,9 +95,9 @@ describe('generateFallbackSignUpUrl', () => {
         executionId: '456',
         redirect_uri: 'https://example.com/callback',
       });
-      const result = generateFallbackSignUpUrl(params);
+      const result = generateFallbackSignInUrl(params);
 
-      expect(result).toContain('/gate/signup?');
+      expect(result).toContain('/gate/signin?');
       expect(result).toContain('client_id=abc');
       expect(result).toContain('redirect_uri=');
       expect(result).not.toContain('authId=');
@@ -107,17 +107,17 @@ describe('generateFallbackSignUpUrl', () => {
     it('should return the bare path when only authId and executionId are present', () => {
       import.meta.env.BASE_URL = '/gate/';
       const params = new URLSearchParams({authId: '123', executionId: '456'});
-      const result = generateFallbackSignUpUrl(params);
+      const result = generateFallbackSignInUrl(params);
 
-      expect(result).toBe('/gate/signup');
+      expect(result).toBe('/gate/signin');
       expect(result).not.toContain('?');
     });
 
-    it('should return only the sign-up path when params are empty', () => {
+    it('should return only the sign-in path when params are empty', () => {
       import.meta.env.BASE_URL = '/';
-      const result = generateFallbackSignUpUrl(new URLSearchParams());
+      const result = generateFallbackSignInUrl(new URLSearchParams());
 
-      expect(result).toBe('/signup');
+      expect(result).toBe('/signin');
     });
   });
 });

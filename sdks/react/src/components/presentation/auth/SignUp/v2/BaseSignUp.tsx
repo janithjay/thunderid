@@ -285,6 +285,7 @@ const BaseSignUpContent: FC<BaseSignUpProps> = ({
   const [isFlowInitialized, setIsFlowInitialized] = useState(false);
   const [currentFlow, setCurrentFlow] = useState<EmbeddedSignUpFlowResponseV2 | null>(null);
   const [apiError, setApiError] = useState<Error | null>(null);
+  const [isStorageReady, setIsStorageReady] = useState(false);
   const [passkeyState, setPasskeyState] = useState<PasskeyState>({
     actionId: null,
     creationOptions: null,
@@ -312,6 +313,8 @@ const BaseSignUpContent: FC<BaseSignUpProps> = ({
         }
       } catch {
         // StorageManager unavailable — continue without persisted token
+      } finally {
+        setIsStorageReady(true);
       }
     })();
   }, [isSdkInitialized]);
@@ -441,7 +444,9 @@ const BaseSignUpContent: FC<BaseSignUpProps> = ({
     [t],
   );
 
-  const formFields: any = (currentFlow?.data as any)?.components ? extractFormFields((currentFlow!.data as any).components) : [];
+  const formFields: any = (currentFlow?.data as any)?.components
+    ? extractFormFields((currentFlow!.data as any).components)
+    : [];
 
   const form: any = useForm<Record<string, string>>({
     fields: formFields,
@@ -936,7 +941,7 @@ const BaseSignUpContent: FC<BaseSignUpProps> = ({
       return;
     }
 
-    if (isInitialized && !isFlowInitialized && !initializationAttemptedRef.current) {
+    if (isInitialized && isStorageReady && !isFlowInitialized && !initializationAttemptedRef.current) {
       initializationAttemptedRef.current = true;
 
       (async (): Promise<void> => {
@@ -945,13 +950,22 @@ const BaseSignUpContent: FC<BaseSignUpProps> = ({
         clearMessages();
 
         try {
-          const rawResponse: any = await onInitialize?.();
+          const payload: any = challengeTokenRef.current ? {challengeToken: challengeTokenRef.current} : undefined;
+          const rawResponse: any = await onInitialize?.(payload);
           const response: any = normalizeFlowResponseLocal(rawResponse);
 
           await setChallengeToken(response.challengeToken ?? null);
           setCurrentFlow(response);
           setIsFlowInitialized(true);
           onFlowChange?.(response);
+
+          // Clean up executionId and applicationId from URL after storing in state
+          if (window?.location?.href) {
+            const url: URL = new URL(window.location.href);
+            url.searchParams.delete('executionId');
+            url.searchParams.delete('applicationId');
+            window.history.replaceState({}, '', url.toString());
+          }
 
           if (response.flowStatus === EmbeddedSignUpFlowStatusV2.Error) {
             handleError(response);
@@ -983,6 +997,7 @@ const BaseSignUpContent: FC<BaseSignUpProps> = ({
     }
   }, [
     isInitialized,
+    isStorageReady,
     isFlowInitialized,
     onInitialize,
     onComplete,

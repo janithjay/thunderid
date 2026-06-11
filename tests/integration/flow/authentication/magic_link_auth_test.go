@@ -67,7 +67,7 @@ var magicLinkAuthFlow = testutils.Flow{
 				"magicLinkURL": "https://localhost:8095/gate/signin",
 			},
 			"executor": map[string]interface{}{
-				"name": "MagicLinkAuthExecutor",
+				"name": "MagicLinkExecutor",
 				"mode": "generate",
 			},
 			"onSuccess": "email_magic_link",
@@ -96,7 +96,7 @@ var magicLinkAuthFlow = testutils.Flow{
 			"id":   "verify_magic_link",
 			"type": "TASK_EXECUTION",
 			"executor": map[string]interface{}{
-				"name": "MagicLinkAuthExecutor",
+				"name": "MagicLinkExecutor",
 				"mode": "verify",
 			},
 			"onSuccess": "auth_assert",

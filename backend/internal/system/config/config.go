@@ -37,6 +37,7 @@ import (
 )
 
 const schemeHTTPS = "https"
+const localhost = "localhost"
 
 // SecurityConfig holds the security-related configuration details.
 //
@@ -73,12 +74,13 @@ type ServerConfig struct {
 
 // GateClientConfig holds the client configuration details.
 type GateClientConfig struct {
-	Hostname  string `yaml:"hostname" json:"hostname"`
-	Port      int    `yaml:"port" json:"port"`
-	Scheme    string `yaml:"scheme" json:"scheme"`
-	Path      string `yaml:"path" json:"path"`
-	LoginPath string `yaml:"login_path" json:"login_path"`
-	ErrorPath string `yaml:"error_path" json:"error_path"`
+	Hostname     string `yaml:"hostname" json:"hostname"`
+	Port         int    `yaml:"port" json:"port"`
+	Scheme       string `yaml:"scheme" json:"scheme"`
+	Path         string `yaml:"path" json:"path"`
+	LoginPath    string `yaml:"login_path" json:"login_path"`
+	ErrorPath    string `yaml:"error_path" json:"error_path"`
+	CallbackPath string `yaml:"callback_path" json:"callback_path"`
 }
 
 // TLSConfig holds the TLS configuration details.
@@ -690,7 +692,7 @@ func (c *TrustedIssuerConfig) Validate() error {
 		return nil
 	case "http":
 		host := parsed.Hostname()
-		if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		if host == localhost || host == "127.0.0.1" || host == "::1" {
 			return nil
 		}
 		return fmt.Errorf(
@@ -805,6 +807,9 @@ func LoadConfig(configPath string, defaultPath string, serverHome string) (*Conf
 		}
 		if cfg.GateClient.ErrorPath == "" {
 			cfg.GateClient.ErrorPath = urlpath.Join(cfg.GateClient.Path, "error")
+		}
+		if cfg.GateClient.CallbackPath == "" {
+			cfg.GateClient.CallbackPath = urlpath.Join(cfg.GateClient.Path, "callback")
 		}
 	}
 
