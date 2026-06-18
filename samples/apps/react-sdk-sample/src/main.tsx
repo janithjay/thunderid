@@ -54,6 +54,7 @@ createRoot(document.getElementById("root")!).render(
             <ThunderIDProvider
                 baseUrl={baseUrl}
                 clientId={clientId}
+                organizationHandle={config.organizationHandle}
                 scopes={config.scopes}
             >
                 <App />

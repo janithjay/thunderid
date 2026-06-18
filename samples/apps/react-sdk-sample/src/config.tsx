@@ -20,6 +20,7 @@ const response = await fetch("/runtime.json");
 const runtimeConfig = (await response.json()) as {
     baseUrl?: string;
     clientId?: string;
+    organizationHandle?: string;
     scopes?: string[] | string;
 };
 
@@ -41,6 +42,8 @@ const config = {
     clientId:
         runtimeConfig.clientId || import.meta.env.VITE_REACT_APP_CLIENT_ID,
     baseUrl: runtimeConfig.baseUrl || import.meta.env.VITE_THUNDERID_BASE_URL,
+    organizationHandle:
+        runtimeConfig.organizationHandle || import.meta.env.VITE_THUNDERID_ORGANIZATION_HANDLE,
     scopes: normalizeScopes(
         runtimeConfig.scopes ?? import.meta.env.VITE_REACT_APP_SCOPES,
     ),

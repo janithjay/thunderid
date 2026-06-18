@@ -1,5 +1,6 @@
 {
     "clientId": "REACT_SDK_SAMPLE",
     "baseUrl": "https://localhost:8090",
+    "organizationHandle": "default",
     "scopes": ["openid", "profile"]
 }

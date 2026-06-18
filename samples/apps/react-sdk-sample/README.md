@@ -46,6 +46,7 @@ Open `dist/runtime.json` and set the `clientId` to the value you used in `thunde
 {
   "clientId": "{your-client-id}",
   "baseUrl": "https://localhost:8090",
+  "organizationHandle": "default",
   "scopes": ["openid", "profile"]
 }
 ```
@@ -54,6 +55,7 @@ Open `dist/runtime.json` and set the `clientId` to the value you used in `thunde
 |----------|-------------|
 | `clientId` | The OAuth client ID configured in `thunderid.env` |
 | `baseUrl` | The base URL of your server |
+| `organizationHandle` | The organization handle (required since `baseUrl` acts as a custom domain without the tenant path) |
 | `scopes` | Optional OAuth scopes as a string array or a space/comma-delimited string |
 
 ### 3. Start the Application
@@ -116,6 +118,7 @@ The application will be available at [https://localhost:3000](https://localhost:
 {
   "clientId": "string (required) - OAuth client ID",
   "baseUrl": "string (required) - Server base URL",
+  "organizationHandle": "string (required if custom domain) - The organization handle",
   "scopes": "string | string[] (optional) - Requested OAuth scopes"
 }
 ```
@@ -126,6 +129,7 @@ If a value is missing from `runtime.json`, the app falls back to Vite environmen
 
 - `VITE_REACT_APP_CLIENT_ID`
 - `VITE_THUNDERID_BASE_URL`
+- `VITE_THUNDERID_ORGANIZATION_HANDLE`
 - `VITE_REACT_APP_SCOPES` (optional, space/comma-delimited list, e.g. `openid profile`)
 
 ### Application Setup
@@ -161,7 +165,7 @@ Before running the app, ensure your application is configured with:
 
 ### Authentication Flow
 
-1. **SDK Provider Setup**: The app wraps components with `AsgardeoProvider` configured with base URL and client ID
+1. **SDK Provider Setup**: The app wraps components with `ThunderIDProvider` configured with base URL, client ID, and organization handle
 2. **Conditional Rendering**: Uses `SignedIn`/`SignedOut` components to show appropriate content based on auth state
 3. **Token Management**: Retrieves and decodes JWT tokens to display user information
 
@@ -169,13 +173,14 @@ Before running the app, ensure your application is configured with:
 
 **Provider Configuration:**
 ```tsx
-<AsgardeoProvider
+<ThunderIDProvider
   baseUrl={config.baseUrl}
   clientId={config.clientId}
-  platform="AsgardeoV2"
+  organizationHandle={config.organizationHandle}
+  scopes={config.scopes}
 >
   <App />
-</AsgardeoProvider>
+</ThunderIDProvider>
 ```
 
 **Using Authentication Hooks:**

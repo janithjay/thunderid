@@ -1,5 +1,6 @@
 {
   "clientId": "{your-client-id}",
   "baseUrl": "https://localhost:8090",
+  "organizationHandle": "default",
   "scopes": ["openid", "profile"]
 }
