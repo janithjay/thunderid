@@ -47,6 +47,8 @@ type UserServiceInterface interface {
 	GetUserMetadata(ctx context.Context, userID string) (*entitytype.EntityType, *tidcommon.ServiceError)
 	UpdateUserCredentials(ctx context.Context, userID string,
 		credentials json.RawMessage) *tidcommon.ServiceError
+	UpdateSelfUserCredentials(ctx context.Context, userID string,
+		credentials json.RawMessage) *tidcommon.ServiceError
 	DeleteUser(ctx context.Context, userID string) *tidcommon.ServiceError
 	ResolveUserOUHandle(ctx context.Context, user *User) *tidcommon.ServiceError
 	SetDependencyRegistry(r resourcedependency.Registry)
@@ -775,6 +777,74 @@ func (us *userService) UpdateUserCredentials(
 		log.MaskedString(log.LoggerKeyUserID, userID),
 		log.Int("credentialTypesCount", len(credentialsMap)))
 	return nil
+}
+
+// UpdateSelfUserCredentials updates credentials for the authenticated self user after verifying current password.
+func (us *userService) UpdateSelfUserCredentials(
+	ctx context.Context,
+	userID string,
+	credentials json.RawMessage,
+) *tidcommon.ServiceError {
+	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, loggerComponentName))
+	logger.Debug(ctx, "Updating self user credentials", log.MaskedString(log.LoggerKeyUserID, userID))
+
+	if strings.TrimSpace(userID) == "" {
+		return &ErrorAuthenticationFailed
+	}
+
+	if len(credentials) == 0 {
+		return &ErrorMissingCredentials
+	}
+
+	var credentialsMap map[string]json.RawMessage
+	if err := json.Unmarshal(credentials, &credentialsMap); err != nil {
+		logger.Debug(ctx, "Failed to parse self credentials request", log.Error(err))
+		return &ErrorInvalidRequestFormat
+	}
+
+	// Current password verification is mandatory for self-service password update
+	currentPasswordVal, exists := credentialsMap["currentPassword"]
+	if !exists || len(currentPasswordVal) == 0 {
+		return &ErrorAuthenticationFailed
+	}
+
+	var currentPasswordStr string
+	if err := json.Unmarshal(currentPasswordVal, &currentPasswordStr); err != nil ||
+		strings.TrimSpace(currentPasswordStr) == "" {
+		return &ErrorAuthenticationFailed
+	}
+
+	// Verify current password against stored credentials
+	authCreds := map[string]interface{}{
+		"password": currentPasswordStr,
+	}
+	_, authErr := us.entityService.AuthenticateEntityByID(ctx, userID, authCreds)
+	if authErr != nil {
+		logger.Debug(ctx, "Self user current password verification failed",
+			log.MaskedString(log.LoggerKeyUserID, userID), log.Error(authErr))
+		return &ErrorAuthenticationFailed
+	}
+
+	// Extract new password
+	newPasswordVal, exists := credentialsMap["password"]
+	if !exists || len(newPasswordVal) == 0 {
+		return &ErrorMissingCredentials
+	}
+
+	var newPasswordStr string
+	if err := json.Unmarshal(newPasswordVal, &newPasswordStr); err != nil || strings.TrimSpace(newPasswordStr) == "" {
+		return &ErrorMissingCredentials
+	}
+
+	delete(credentialsMap, "currentPassword")
+
+	cleanedCredsJSON, err := json.Marshal(credentialsMap)
+	if err != nil {
+		return logErrorAndReturnServerError(ctx, logger, "Failed to marshal new credentials", err,
+			log.MaskedString(log.LoggerKeyUserID, userID))
+	}
+
+	return us.UpdateUserCredentials(ctx, userID, cleanedCredsJSON)
 }
 
 // DeleteUser delete the user for given user id.

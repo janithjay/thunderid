@@ -477,7 +477,7 @@ func (uh *userHandler) HandleSelfUserCredentialUpdateRequest(w http.ResponseWrit
 		return
 	}
 
-	if svcErr := uh.userService.UpdateUserCredentials(ctx, userID, updateRequest.Attributes); svcErr != nil {
+	if svcErr := uh.userService.UpdateSelfUserCredentials(ctx, userID, updateRequest.Attributes); svcErr != nil {
 		handleError(ctx, w, svcErr)
 		return
 	}

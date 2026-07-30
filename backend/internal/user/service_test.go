@@ -613,6 +613,103 @@ func TestUserService_UpdateUserCredentials_Succeeds(t *testing.T) {
 	userStoreMock.AssertNumberOfCalls(t, "UpdateCredentials", 1)
 }
 
+func TestUserService_UpdateSelfUserCredentials(t *testing.T) {
+	t.Run("succeeds with correct current password", func(t *testing.T) {
+		userStoreMock := entitymock.NewEntityServiceInterfaceMock(t)
+		userStoreMock.On("IsEntityDeclarative", mock.Anything, mock.Anything).Return(false, nil).Maybe()
+		userStoreMock.
+			On("AuthenticateEntityByID", mock.Anything, svcTestUserID1,
+				map[string]interface{}{"password": "OldPassword123!"}).
+			Return(&entitypkg.AuthenticateResult{EntityID: svcTestUserID1}, nil).
+			Once()
+		userStoreMock.
+			On("GetEntity", mock.Anything, svcTestUserID1).
+			Return(&providers.Entity{
+				Category: providers.EntityCategoryUser, ID: svcTestUserID1, Type: "Person",
+			}, nil).
+			Once()
+
+		var capturedJSON json.RawMessage
+		userStoreMock.
+			On("UpdateCredentials", mock.Anything, svcTestUserID1, mock.Anything).
+			Run(func(args mock.Arguments) {
+				capturedJSON = args.Get(2).(json.RawMessage)
+			}).
+			Return(nil).
+			Once()
+
+		service := &userService{
+			entityService: userStoreMock,
+			authzService:  newAllowAllAuthz(t),
+		}
+
+		creds := json.RawMessage(`{"currentPassword":"OldPassword123!","password":"NewPassword123!"}`)
+		svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1, creds)
+		require.Nil(t, svcErr)
+
+		var plaintextMap map[string]interface{}
+		require.NoError(t, json.Unmarshal(capturedJSON, &plaintextMap))
+		require.Equal(t, "NewPassword123!", plaintextMap["password"])
+		require.Nil(t, plaintextMap["currentPassword"])
+	})
+
+	t.Run("fails with incorrect current password and leaves password unchanged", func(t *testing.T) {
+		userStoreMock := entitymock.NewEntityServiceInterfaceMock(t)
+		userStoreMock.
+			On("AuthenticateEntityByID", mock.Anything, svcTestUserID1,
+				map[string]interface{}{"password": "WrongPassword!"}).
+			Return(nil, entitypkg.ErrAuthenticationFailed).
+			Once()
+
+		service := &userService{
+			entityService: userStoreMock,
+			authzService:  newAllowAllAuthz(t),
+		}
+
+		creds := json.RawMessage(`{"currentPassword":"WrongPassword!","password":"NewPassword123!"}`)
+		svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1, creds)
+		require.NotNil(t, svcErr)
+		require.Equal(t, ErrorAuthenticationFailed.Code, svcErr.Code)
+		userStoreMock.AssertNotCalled(t, "UpdateCredentials", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("fails when current password is missing", func(t *testing.T) {
+		userStoreMock := entitymock.NewEntityServiceInterfaceMock(t)
+
+		service := &userService{
+			entityService: userStoreMock,
+			authzService:  newAllowAllAuthz(t),
+		}
+
+		creds := json.RawMessage(`{"password":"NewPassword123!"}`)
+		svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1, creds)
+		require.NotNil(t, svcErr)
+		require.Equal(t, ErrorAuthenticationFailed.Code, svcErr.Code)
+		userStoreMock.AssertNotCalled(t, "AuthenticateEntityByID", mock.Anything, mock.Anything, mock.Anything)
+		userStoreMock.AssertNotCalled(t, "UpdateCredentials", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("fails when new password is missing", func(t *testing.T) {
+		userStoreMock := entitymock.NewEntityServiceInterfaceMock(t)
+		userStoreMock.
+			On("AuthenticateEntityByID", mock.Anything, svcTestUserID1,
+				map[string]interface{}{"password": "OldPassword123!"}).
+			Return(&entitypkg.AuthenticateResult{EntityID: svcTestUserID1}, nil).
+			Once()
+
+		service := &userService{
+			entityService: userStoreMock,
+			authzService:  newAllowAllAuthz(t),
+		}
+
+		creds := json.RawMessage(`{"currentPassword":"OldPassword123!"}`)
+		svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1, creds)
+		require.NotNil(t, svcErr)
+		require.Equal(t, ErrorMissingCredentials.Code, svcErr.Code)
+		userStoreMock.AssertNotCalled(t, "UpdateCredentials", mock.Anything, mock.Anything, mock.Anything)
+	})
+}
+
 func TestUserService_UpdateUserCredentials_Rejections(t *testing.T) {
 	tests := []struct {
 		name          string

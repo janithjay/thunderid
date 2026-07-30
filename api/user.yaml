@@ -1370,6 +1370,7 @@ paths:
               $ref: '#/components/schemas/UpdateSelfUserRequest'
             example:
               attributes:
+                currentPassword: "OldP@ssword123!"
                 password: "n3wP@ssword!"
       responses:
         "204":

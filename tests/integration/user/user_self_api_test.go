@@ -163,7 +163,8 @@ func (s *SelfUserEndpointsSuite) TestSelfUserUpdateCredentials() {
 	newPassword := s.password + "!"
 	payload := map[string]interface{}{
 		"attributes": map[string]interface{}{
-			"password": newPassword,
+			"currentPassword": s.password,
+			"password":        newPassword,
 		},
 	}
 
