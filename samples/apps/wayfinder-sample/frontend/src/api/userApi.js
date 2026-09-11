@@ -45,10 +45,13 @@ export async function updateMyUser(accessToken, attributes) {
   });
 }
 
-export async function updateMyCredentials(accessToken, attributes) {
+// credentials is keyed by credential name, each value { currentValue, newValue }, matching
+// POST /users/me/update-credentials. currentValue is required once the account already has a
+// value stored for that credential, and omitted for a first-time set.
+export async function updateMyCredentials(accessToken, credentials) {
   return thunderRequest(`/users/me/update-credentials`, accessToken, {
     method: "POST",
-    body: JSON.stringify({ attributes })
+    body: JSON.stringify(credentials)
   });
 }
 

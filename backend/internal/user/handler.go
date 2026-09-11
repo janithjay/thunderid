@@ -459,7 +459,7 @@ func (uh *userHandler) HandleSelfUserCredentialUpdateRequest(w http.ResponseWrit
 		return
 	}
 
-	updateRequest, err := sysutils.DecodeJSONBody[UpdateSelfUserRequest](r)
+	updateRequest, err := sysutils.DecodeJSONBody[UpdateSelfCredentialsRequest](r)
 	if err != nil {
 		var valErr *sysutils.ValidationError
 		if errors.As(err, &valErr) {
@@ -473,13 +473,8 @@ func (uh *userHandler) HandleSelfUserCredentialUpdateRequest(w http.ResponseWrit
 		handleError(ctx, w, &ErrorInvalidRequestFormat)
 		return
 	}
-	attrStr := strings.TrimSpace(string(updateRequest.Attributes))
-	if len(updateRequest.Attributes) == 0 || attrStr == "{}" {
-		handleError(ctx, w, &ErrorMissingCredentials)
-		return
-	}
 
-	if svcErr := uh.userService.UpdateUserCredentials(ctx, userID, updateRequest.Attributes); svcErr != nil {
+	if svcErr := uh.userService.UpdateSelfUserCredentials(ctx, userID, *updateRequest); svcErr != nil {
 		handleError(ctx, w, svcErr)
 		return
 	}
@@ -578,7 +573,8 @@ func handleError(ctx context.Context, w http.ResponseWriter, svcErr *tidcommon.S
 			statusCode = http.StatusBadRequest
 		case ErrorAuthenticationFailed.Code:
 			statusCode = http.StatusUnauthorized
-		case tidcommon.ErrorUnauthorized.Code:
+		case tidcommon.ErrorUnauthorized.Code,
+			ErrorInvalidCurrentPassword.Code:
 			statusCode = http.StatusForbidden
 		default:
 			statusCode = http.StatusBadRequest

@@ -70,6 +70,20 @@ type UpdateSelfUserRequest struct {
 	Attributes json.RawMessage `json:"attributes,omitempty"`
 }
 
+// CredentialUpdate is one credential's current and new value in a self-service credential update.
+// CurrentValue is required once the account already has a stored value for the credential, and
+// verified before the write. It is omitted for a first-time set, when the account has no stored
+// value for that credential yet.
+type CredentialUpdate struct {
+	CurrentValue string `json:"currentValue,omitempty"`
+	NewValue     string `json:"newValue"`
+}
+
+// UpdateSelfCredentialsRequest represents the request body for the authenticated user changing one
+// or more of their own credentials, keyed by whatever attribute the user's entity type schema
+// declares credential:true (for example "password" or "pin").
+type UpdateSelfCredentialsRequest map[string]CredentialUpdate
+
 // UpdateUserCredentialsRequest represents the request body for updating user credentials by an admin.
 type UpdateUserCredentialsRequest struct {
 	Credentials json.RawMessage `json:"credentials,omitempty"`

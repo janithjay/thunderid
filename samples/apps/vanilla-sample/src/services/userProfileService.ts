@@ -82,16 +82,22 @@ export const updateCurrentUserProfile = async (
     return normalizeUserProfile(await response.json() as Partial<UserProfile>);
 };
 
-export const updateCurrentUserPassword = async (password: string): Promise<void> => {
+export const updateCurrentUserPassword = async (
+    currentPassword: string,
+    newPassword: string,
+): Promise<void> => {
     const response = await fetch('/api/profile/password', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
         },
+        // Keyed by credential name, matching POST /users/me/update-credentials. currentValue is
+        // verified before the write when the account already has a password stored.
         body: JSON.stringify({
-            attributes: {
-                password,
+            password: {
+                currentValue: currentPassword,
+                newValue: newPassword,
             },
         }),
     });

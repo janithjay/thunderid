@@ -47,6 +47,8 @@ type UserServiceInterface interface {
 	GetUserMetadata(ctx context.Context, userID string) (*entitytype.EntityType, *tidcommon.ServiceError)
 	UpdateUserCredentials(ctx context.Context, userID string,
 		credentials json.RawMessage) *tidcommon.ServiceError
+	UpdateSelfUserCredentials(ctx context.Context, userID string,
+		updates map[string]CredentialUpdate) *tidcommon.ServiceError
 	DeleteUser(ctx context.Context, userID string) *tidcommon.ServiceError
 	ValidateDeleteUser(ctx context.Context, userID string) *tidcommon.ServiceError
 	ResolveUserOUHandle(ctx context.Context, user *providers.User) *tidcommon.ServiceError
@@ -780,6 +782,85 @@ func (us *userService) UpdateUserCredentials(
 		log.MaskedString(log.LoggerKeyUserID, userID),
 		log.Int("credentialTypesCount", len(credentialsMap)))
 	return nil
+}
+
+// UpdateSelfUserCredentials lets the authenticated user change one or more of their own
+// credentials in a single call, verifying each credential's current value before it is
+// overwritten. Kept separate from UpdateUserCredentials (the admin reset path), since an admin has
+// no current value to supply; the actual write is delegated to UpdateUserCredentials once every
+// credential in the request has been verified.
+//
+// For each credential in updates:
+//   - the account already has a stored value: currentValue is required and must match it, or the
+//     write is rejected with ErrorInvalidCurrentPassword.
+//   - the account has no stored value yet: currentValue is not required. This is the
+//     first-time-set path for accounts that have never had a plaintext credential, there is nothing
+//     stored to prove against, so the authenticated token itself is the proof.
+func (us *userService) UpdateSelfUserCredentials(
+	ctx context.Context, userID string, updates map[string]CredentialUpdate,
+) *tidcommon.ServiceError {
+	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, loggerComponentName))
+
+	if strings.TrimSpace(userID) == "" {
+		return &ErrorAuthenticationFailed
+	}
+	if len(updates) == 0 {
+		return &ErrorMissingCredentials
+	}
+
+	newValues := make(map[string]string, len(updates))
+	for credType, update := range updates {
+		if strings.TrimSpace(update.NewValue) == "" {
+			return &ErrorMissingCredentials
+		}
+
+		// System-managed types (passkey) are never schema-declared and can never be proven by a
+		// plaintext value comparison, so they are rejected before any verification is attempted.
+		if CredentialType(credType).IsSystemManaged() {
+			return &ErrorInvalidCredential
+		}
+
+		stored, err := us.entityService.GetCredentialsByType(ctx, userID, credType)
+		if err != nil {
+			if errors.Is(err, entity.ErrEntityNotFound) {
+				return &ErrorUserNotFound
+			}
+			return logErrorAndReturnServerError(ctx, logger, "Failed to read stored credentials", err,
+				log.MaskedString(log.LoggerKeyUserID, userID))
+		}
+
+		if len(stored) > 0 {
+			if strings.TrimSpace(update.CurrentValue) == "" {
+				return &ErrorInvalidCurrentPassword
+			}
+
+			_, authErr := us.entityService.AuthenticateEntityByID(
+				ctx, userID, map[string]interface{}{credType: update.CurrentValue})
+			if authErr != nil {
+				switch {
+				case errors.Is(authErr, entity.ErrAuthenticationFailed):
+					logger.Debug(ctx, "Current credential verification failed",
+						log.MaskedString(log.LoggerKeyUserID, userID))
+					return &ErrorInvalidCurrentPassword
+				case errors.Is(authErr, entity.ErrEntityNotFound):
+					return &ErrorUserNotFound
+				default:
+					return logErrorAndReturnServerError(ctx, logger, "Failed to verify current credential", authErr,
+						log.MaskedString(log.LoggerKeyUserID, userID))
+				}
+			}
+		}
+
+		newValues[credType] = update.NewValue
+	}
+
+	credentials, marshalErr := json.Marshal(newValues)
+	if marshalErr != nil {
+		return logErrorAndReturnServerError(ctx, logger, "Failed to marshal credential update", marshalErr,
+			log.MaskedString(log.LoggerKeyUserID, userID))
+	}
+
+	return us.UpdateUserCredentials(ctx, userID, credentials)
 }
 
 // ValidateDeleteUser checks whether the caller may delete the user and whether the target is deletable,

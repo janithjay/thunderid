@@ -659,6 +659,178 @@ func TestUserService_UpdateUserCredentials_Rejections(t *testing.T) {
 	}
 }
 
+func TestUserService_UpdateSelfUserCredentials_MissingUserID(t *testing.T) {
+	service := &userService{}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), "",
+		map[string]CredentialUpdate{"password": {NewValue: "new"}})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorAuthenticationFailed, *svcErr)
+}
+
+func TestUserService_UpdateSelfUserCredentials_EmptyUpdates(t *testing.T) {
+	service := &userService{}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorMissingCredentials, *svcErr)
+}
+
+func TestUserService_UpdateSelfUserCredentials_MissingNewValue(t *testing.T) {
+	service := &userService{}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{"password": {}})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorMissingCredentials, *svcErr)
+}
+
+func TestUserService_UpdateSelfUserCredentials_RejectsSystemManaged(t *testing.T) {
+	storeMock := entitymock.NewEntityServiceInterfaceMock(t)
+	service := &userService{entityService: storeMock}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{"passkey": {NewValue: "passkey-credential-1"}})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorInvalidCredential, *svcErr)
+	storeMock.AssertNotCalled(t, "GetCredentialsByType", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestUserService_UpdateSelfUserCredentials_MissingCurrentValueWhenStored(t *testing.T) {
+	storeMock := entitymock.NewEntityServiceInterfaceMock(t)
+	storeMock.
+		On("GetCredentialsByType", mock.Anything, svcTestUserID1, "password").
+		Return([]entitypkg.StoredCredential{{Value: "hashed"}}, nil).
+		Once()
+
+	service := &userService{entityService: storeMock}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{"password": {NewValue: "n3wP@ss!"}})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorInvalidCurrentPassword, *svcErr)
+	storeMock.AssertNotCalled(t, "AuthenticateEntityByID", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestUserService_UpdateSelfUserCredentials_WrongCurrentValue(t *testing.T) {
+	storeMock := entitymock.NewEntityServiceInterfaceMock(t)
+	storeMock.
+		On("GetCredentialsByType", mock.Anything, svcTestUserID1, "password").
+		Return([]entitypkg.StoredCredential{{Value: "hashed"}}, nil).
+		Once()
+	storeMock.
+		On("AuthenticateEntityByID", mock.Anything, svcTestUserID1,
+			map[string]interface{}{"password": "wrong"}).
+		Return((*entitypkg.AuthenticateResult)(nil), entitypkg.ErrAuthenticationFailed).
+		Once()
+
+	service := &userService{entityService: storeMock}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{"password": {CurrentValue: "wrong", NewValue: "n3wP@ss!"}})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorInvalidCurrentPassword, *svcErr)
+	storeMock.AssertNotCalled(t, "UpdateCredentials", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestUserService_UpdateSelfUserCredentials_FirstTimeSetSucceeds(t *testing.T) {
+	storeMock := entitymock.NewEntityServiceInterfaceMock(t)
+	storeMock.
+		On("GetCredentialsByType", mock.Anything, svcTestUserID1, "password").
+		Return([]entitypkg.StoredCredential{}, nil).
+		Once()
+	storeMock.On("IsEntityDeclarative", mock.Anything, mock.Anything).Return(false, nil).Maybe()
+	storeMock.
+		On("GetEntity", mock.Anything, svcTestUserID1).
+		Return(&providers.Entity{Category: providers.EntityCategoryUser, ID: svcTestUserID1, Type: "Person"}, nil).
+		Once()
+
+	var capturedJSON json.RawMessage
+	storeMock.
+		On("UpdateCredentials", mock.Anything, svcTestUserID1, mock.Anything).
+		Run(func(args mock.Arguments) {
+			capturedJSON = args.Get(2).(json.RawMessage)
+		}).
+		Return(nil).
+		Once()
+
+	service := &userService{
+		entityService: storeMock,
+		authzService:  newAllowAllAuthz(t),
+	}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{"password": {NewValue: "n3wP@ss!"}})
+	require.Nil(t, svcErr)
+
+	var plaintextMap map[string]interface{}
+	require.NoError(t, json.Unmarshal(capturedJSON, &plaintextMap))
+	require.Equal(t, "n3wP@ss!", plaintextMap["password"])
+	storeMock.AssertNotCalled(t, "AuthenticateEntityByID", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestUserService_UpdateSelfUserCredentials_VerifiedRotationSucceeds(t *testing.T) {
+	storeMock := entitymock.NewEntityServiceInterfaceMock(t)
+	storeMock.
+		On("GetCredentialsByType", mock.Anything, svcTestUserID1, "password").
+		Return([]entitypkg.StoredCredential{{Value: "hashed"}}, nil).
+		Once()
+	storeMock.
+		On("AuthenticateEntityByID", mock.Anything, svcTestUserID1,
+			map[string]interface{}{"password": "0ldP@ss!"}).
+		Return(&entitypkg.AuthenticateResult{EntityID: svcTestUserID1}, nil).
+		Once()
+	storeMock.On("IsEntityDeclarative", mock.Anything, mock.Anything).Return(false, nil).Maybe()
+	storeMock.
+		On("GetEntity", mock.Anything, svcTestUserID1).
+		Return(&providers.Entity{Category: providers.EntityCategoryUser, ID: svcTestUserID1, Type: "Person"}, nil).
+		Once()
+	storeMock.
+		On("UpdateCredentials", mock.Anything, svcTestUserID1, mock.Anything).
+		Return(nil).
+		Once()
+
+	service := &userService{
+		entityService: storeMock,
+		authzService:  newAllowAllAuthz(t),
+	}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{"password": {CurrentValue: "0ldP@ss!", NewValue: "n3wP@ss!"}})
+	require.Nil(t, svcErr)
+}
+
+// TestUserService_UpdateSelfUserCredentials_MultipleCredentialsOneWrongAbortsWrite verifies that
+// when several credentials are updated in one call, a failure verifying any one of them aborts the
+// whole call before anything is written, rather than writing the ones that did verify.
+func TestUserService_UpdateSelfUserCredentials_MultipleCredentialsOneWrongAbortsWrite(t *testing.T) {
+	storeMock := entitymock.NewEntityServiceInterfaceMock(t)
+	storeMock.
+		On("GetCredentialsByType", mock.Anything, svcTestUserID1, "pin").
+		Return([]entitypkg.StoredCredential{{Value: "hashed"}}, nil).
+		Maybe()
+	storeMock.
+		On("GetCredentialsByType", mock.Anything, svcTestUserID1, "password").
+		Return([]entitypkg.StoredCredential{{Value: "hashed"}}, nil).
+		Maybe()
+	storeMock.
+		On("AuthenticateEntityByID", mock.Anything, svcTestUserID1, mock.Anything).
+		Return((*entitypkg.AuthenticateResult)(nil), entitypkg.ErrAuthenticationFailed).
+		Maybe()
+
+	service := &userService{entityService: storeMock}
+
+	svcErr := service.UpdateSelfUserCredentials(context.Background(), svcTestUserID1,
+		map[string]CredentialUpdate{
+			"password": {CurrentValue: "0ldP@ss!", NewValue: "n3wP@ss!"},
+			"pin":      {CurrentValue: "wrong", NewValue: "4321"},
+		})
+	require.NotNil(t, svcErr)
+	require.Equal(t, ErrorInvalidCurrentPassword, *svcErr)
+	storeMock.AssertNotCalled(t, "UpdateCredentials", mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestUserService_UpdateUserAttributes_Validation(t *testing.T) {
 	service := &userService{}
 

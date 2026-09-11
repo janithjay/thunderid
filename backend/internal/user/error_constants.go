@@ -300,6 +300,22 @@ var (
 			DefaultValue: "The credential updates through this endpoint are not allowed",
 		},
 	}
+	// ErrorInvalidCurrentPassword is returned when the authenticated user's supplied current
+	// value for a credential does not match what is stored, or is missing when required. Despite
+	// the name (kept to avoid an i18n key churn), it applies to any credential type, not only
+	// password.
+	ErrorInvalidCurrentPassword = tidcommon.ServiceError{
+		Type: tidcommon.ClientErrorType,
+		Code: "USR-1029",
+		Error: tidcommon.I18nMessage{
+			Key:          "error.userservice.invalid_current_password",
+			DefaultValue: "Invalid current credential value",
+		},
+		ErrorDescription: tidcommon.I18nMessage{
+			Key:          "error.userservice.invalid_current_password_description",
+			DefaultValue: "The provided current value is incorrect",
+		},
+	}
 )
 
 // Error variables

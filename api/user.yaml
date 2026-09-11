@@ -1347,10 +1347,11 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateSelfUserRequest'
+              $ref: '#/components/schemas/UpdateSelfCredentialsRequest'
             example:
-              attributes:
-                password: "n3wP@ssword!"
+              password:
+                currentValue: "0ldP@ssword!"
+                newValue: "n3wP@ssword!"
       responses:
         "204":
           description: Credentials updated
@@ -1371,6 +1372,16 @@ paths:
                     description:
                       key: "error.userservice.missing_credentials_description"
                       defaultValue: "At least one credential field must be provided"
+                unsupported-credential-type:
+                  summary: name is not declared credential:true in the schema, or is system-managed (e.g. passkey)
+                  value:
+                    code: "USR-1024"
+                    message:
+                      key: "error.userservice.invalid_credential"
+                      defaultValue: "Invalid request format"
+                    description:
+                      key: "error.userservice.invalid_credential_description"
+                      defaultValue: "Invalid credential fields in request"
         "401":
           description: Unauthorized - missing or invalid authentication token
           content:
@@ -1385,6 +1396,20 @@ paths:
                 description:
                   key: "error.unauthorized_description"
                   defaultValue: "Authentication is required to access this resource"
+        "403":
+          description: Forbidden - the supplied current value is incorrect or missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "USR-1029"
+                message:
+                  key: "error.userservice.invalid_current_password"
+                  defaultValue: "Invalid current credential value"
+                description:
+                  key: "error.userservice.invalid_current_password_description"
+                  defaultValue: "The provided current value is incorrect"
         "404":
           description: Authenticated user not found
           content:
@@ -2190,6 +2215,31 @@ components:
           type: object
           description: "User attributes"
           additionalProperties: true
+
+    UpdateSelfCredentialsRequest:
+      type: object
+      description: "Keyed by credential attribute name, any attribute the schema declares `credential: true` (for example `password` or `pin`). One or more credentials may be updated in a single call."
+      additionalProperties:
+        $ref: '#/components/schemas/CredentialUpdate'
+      example:
+        password:
+          currentValue: "0ldP@ssword!"
+          newValue: "n3wP@ssword!"
+
+    CredentialUpdate:
+      type: object
+      required: [newValue]
+      properties:
+        currentValue:
+          type: string
+          format: password
+          description: "The credential's existing value, verified before the write. Required once the account already has a stored value for this credential. Omit it for a first-time set."
+          example: "0ldP@ssword!"
+        newValue:
+          type: string
+          format: password
+          description: "The new value to set."
+          example: "n3wP@ssword!"
 
     UpdateUserCredentialsRequest:
       type: object
