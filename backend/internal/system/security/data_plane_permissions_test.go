@@ -98,6 +98,19 @@ func (s *DataPlanePermissionsTestSuite) TestDeclaresNoProjectPermission() {
 	}
 }
 
+// Only the Data Plane serves sessions. The session listing requires the org permission, which the system one
+// satisfies in every organization unit, and the self-service session routes stay open to any authenticated
+// caller.
+func (s *DataPlanePermissionsTestSuite) TestSessionPermissionsAreUnderOrgAndSystem() {
+	s.Equal("org:session:view", GetSystemPermissions().SessionView)
+	s.Contains(GetSystemPermissions().Catalog, "system:session:view")
+
+	svc, err := newSecurityService(nil, nil, []string{}, apiPermissionEntries)
+	s.Require().NoError(err)
+	s.Equal("org:session:view", svc.getRequiredPermissionForAPI(http.MethodGet, "/sessions"))
+	s.Equal("", svc.getRequiredPermissionForAPI(http.MethodGet, "/users/me/sessions"))
+}
+
 func (s *DataPlanePermissionsTestSuite) TestDeploymentWideReadsRequireOrgAndWritesRequireSystem() {
 	p := GetSystemPermissions()
 	for _, perm := range []string{p.DesignView, p.I18nView, p.AuthzDetailView} {
@@ -131,10 +144,12 @@ func (s *DataPlanePermissionsTestSuite) TestPrefixIsHonored() {
 	s.Equal("mgmt:org:user:view", p.UserView)
 	s.Equal("mgmt:org", p.AppView)
 	s.Equal("mgmt:system", p.DesignCreate)
+	s.Equal("mgmt:org:session:view", p.SessionView)
+	s.True(HasSufficientSystemPermission([]string{"mgmt:system:session:view"}, p.SessionView))
 	s.Equal("mgmt:org:ou:create", ResolveActionPermission(ActionCreateOU))
 }
 
-func (s *DataPlanePermissionsTestSuite) TestCatalogIsTheOrgTree() {
+func (s *DataPlanePermissionsTestSuite) TestCatalogIsTheOrgTreeAndTheSystemChildren() {
 	p := GetSystemPermissions()
 	s.Equal("org", p.Catalog[0])
 	s.Equal([]string{
@@ -147,6 +162,8 @@ func (s *DataPlanePermissionsTestSuite) TestCatalogIsTheOrgTree() {
 		"org:usertype:delete",
 		"org:agenttype", "org:agenttype:view", "org:agenttype:create", "org:agenttype:update",
 		"org:agenttype:delete",
+		"org:session", "org:session:view",
+		"system:session", "system:session:view",
 	}, p.Catalog)
 }
 
@@ -180,7 +197,8 @@ func (s *DataPlanePermissionsTestSuite) TestRouteTable() {
 }
 
 // TestNoControlPlanePermissionIsEnforced verifies that every route, action and MCP tool on the data
-// plane requires the system root, the org root or an org catalog permission, never a system child.
+// plane requires the system root, the org root or a data plane catalog permission, never one only the
+// control plane declares.
 func (s *DataPlanePermissionsTestSuite) TestNoControlPlanePermissionIsEnforced() {
 	p := GetSystemPermissions()
 	allowed := func(perm string) bool {
@@ -207,6 +225,21 @@ func (s *DataPlanePermissionsTestSuite) TestHasSufficientSystemPermission() {
 	s.False(HasSufficientSystemPermission([]string{"system:user:view"}, "system"))
 	s.False(HasSufficientSystemPermission(nil, "org"))
 	s.True(HasSufficientSystemPermission(nil, ""))
+	// A permission declared under the system root satisfies the same one under the org root.
+	s.True(HasSufficientSystemPermission([]string{"system:session:view"}, "org:session:view"))
+	s.True(HasSufficientSystemPermission([]string{"system:session"}, "org:session:view"))
+	s.False(HasSufficientSystemPermission([]string{"org:session:view"}, "system:session:view"))
+}
+
+func (s *DataPlanePermissionsTestSuite) TestReachesDeployment() {
+	s.True(ReachesDeployment([]string{"system"}, "org:user:view"))
+	s.True(ReachesDeployment([]string{"system:session:view"}, "org:session:view"))
+	s.True(ReachesDeployment([]string{"system:session:view"}, "system:session:view"))
+	s.False(ReachesDeployment([]string{"org:session:view"}, "org:session:view"), "an org permission is bounded")
+	s.False(ReachesDeployment([]string{"org"}, "org:session:view"))
+	s.False(ReachesDeployment([]string{"system:user:view"}, "org:user:view"),
+		"a system permission the plane doesn't declare satisfies nothing")
+	s.False(ReachesDeployment([]string{"system"}, ""))
 }
 
 func (s *DataPlanePermissionsTestSuite) TestHasAnySystemPermissionIncludesOrg() {
@@ -301,6 +334,13 @@ func (s *DataPlanePermissionsTestSuite) TestATokenNamingNoUnitNeedsTheSystemPerm
 		{name: "org with a unit", ouID: "ou-1", permissions: []string{"org"}, path: "/users"},
 		{name: "org child with a unit", ouID: "ou-1", permissions: []string{"org:user:view"}, path: "/users"},
 		{name: "system without a unit", permissions: []string{"system"}, path: "/users"},
+		{name: "system child without a unit", permissions: []string{"system:session:view"}, path: "/sessions"},
+		{name: "system child on an org route", permissions: []string{"system:session:view"}, path: "/users",
+			wantErr: errInsufficientPermissions},
+		{name: "org session child without a unit", permissions: []string{"org:session:view"}, path: "/sessions",
+			wantErr: errForbidden},
+		{name: "org session child with a unit", ouID: "ou-1", permissions: []string{"org:session:view"},
+			path: "/sessions"},
 		{name: "self service without a unit", permissions: []string{"org"}, path: "/users/me"},
 	}
 	for _, tc := range tests {

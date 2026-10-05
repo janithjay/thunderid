@@ -166,3 +166,15 @@ type ClientInfo struct {
 	// UserAgent is the client's User-Agent header.
 	UserAgent string
 }
+
+// SessionDetail is a live session together with the applications that have joined it.
+type SessionDetail struct {
+	Session
+	Participants []Participant
+}
+
+// SessionPage is one page of a session listing, with the total number of live sessions that match.
+type SessionPage struct {
+	Sessions     []SessionDetail
+	TotalResults int
+}

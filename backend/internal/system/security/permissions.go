@@ -6,6 +6,7 @@ package security
 import (
 	"context"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/thunder-id/thunderid/internal/system/constants"
@@ -104,6 +105,8 @@ const (
 	ResourceTypeServerConfig ResourceType = "serverconfig"
 	// ResourceTypeConfigurationVersion identifies a configuration version resource.
 	ResourceTypeConfigurationVersion ResourceType = "configversion"
+	// ResourceTypeSession identifies an SSO session resource.
+	ResourceTypeSession ResourceType = "session"
 )
 
 // ---- Permission catalog ----
@@ -459,6 +462,7 @@ type SystemPermissions struct {
 	AppCreate                  string
 	AppUpdate                  string
 	AppDelete                  string
+	SessionView                string
 	// Catalog holds every permission the plane declares besides Root, in declaration order: each
 	// resource followed by its actions.
 	Catalog []string
@@ -984,6 +988,14 @@ func activatePermissions(p *SystemPermissions) {
 		})
 	}
 
+	// Only the Data Plane serves sessions. A plane that declares no session permission leaves the session
+	// APIs out, so they require the root permission.
+	if p.SessionView != "" {
+		apiPermissionEntries = append(apiPermissionEntries,
+			apiPermissionEntry{"GET /sessions", p.SessionView},
+		)
+	}
+
 	compiled, err := compileAPIPermissions(apiPermissionEntries)
 	if err != nil {
 		panic(err)
@@ -1115,14 +1127,31 @@ func LacksOrganizationUnit(ctx context.Context) bool {
 	return GetOUID(ctx) == "" && !HasSystemPermission(GetPermissions(ctx))
 }
 
-// HasSufficientSystemPermission reports whether permissions satisfy a permission of the System resource
-// server. It applies HasSufficientPermission and additionally lets the root system permission satisfy
-// every requirement, so that on the data plane it covers the organization tree as well as its own.
-func HasSufficientSystemPermission(permissions []string, required string) bool {
-	if HasSufficientPermission(permissions, required) {
+// ReachesDeployment reports whether permissions satisfy required through the system tree, which reaches the
+// whole deployment rather than one organization unit. The root system permission satisfies every requirement.
+// On the data plane, a permission the plane declares under the system root also satisfies the one at the same
+// place under the org root: system:session:view satisfies org:session:view in every organization unit. A
+// permission the plane doesn't declare, such as one left from before the org root existed, satisfies nothing.
+func ReachesDeployment(permissions []string, required string) bool {
+	if sysPerms == nil || required == "" {
+		return false
+	}
+	if HasSystemPermission(permissions) {
 		return true
 	}
-	return required != "" && HasSystemPermission(permissions)
+	if sysPerms.Org != "" && strings.HasPrefix(required, sysPerms.Org+":") {
+		required = sysPerms.Root + strings.TrimPrefix(required, sysPerms.Org)
+		if !slices.Contains(sysPerms.Catalog, required) {
+			return false
+		}
+	}
+	return strings.HasPrefix(required, sysPerms.Root+":") && HasSufficientPermission(permissions, required)
+}
+
+// HasSufficientSystemPermission reports whether permissions satisfy a permission of the System resource
+// server: directly, or through the system tree as ReachesDeployment describes.
+func HasSufficientSystemPermission(permissions []string, required string) bool {
+	return HasSufficientPermission(permissions, required) || ReachesDeployment(permissions, required)
 }
 
 // HasSufficientPermission returns true if any permission in userPermissions satisfies

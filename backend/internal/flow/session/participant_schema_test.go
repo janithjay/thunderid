@@ -131,3 +131,69 @@ func (s *ParticipantSchemaTestSuite) TestDeleteParticipantRemovesOneOU() {
 	s.Require().Len(got, 1)
 	s.Equal("ou-y", got[0].OUID)
 }
+
+// insertSession inserts the live session sess-1 of user-1.
+func (s *ParticipantSchemaTestSuite) insertSession(at time.Time) {
+	_, err := s.db.Exec(`INSERT INTO "SESSION" (SESSION_ID, DEPLOYMENT_ID, TYPE, SUBJECT_ID, FLOW_ID, `+
+		`FLOW_VERSION, FLOW_EXECUTION_ID, HANDLE_ID, AUTHENTICATED_AT, LAST_ACTIVE_AT, STATE, VERSION) `+
+		`VALUES ('sess-1', ?, 'SSO', 'user-1', 'flow-1', 1, 'exec-1', 'handle-1', ?, ?, 'ACTIVE', 1)`,
+		testDeploymentID, at, at)
+	s.Require().NoError(err)
+}
+
+// count runs a live-session count query.
+func (s *ParticipantSchemaTestSuite) count(query model.DBQuery, args ...interface{}) int {
+	var total int
+	s.Require().NoError(s.db.QueryRow(query.Query, args...).Scan(&total))
+	return total
+}
+
+// An application signed in under two organization units is two participant rows, but its session is
+// counted once.
+func (s *ParticipantSchemaTestSuite) TestASessionIsCountedOnceForAnApplicationUnderTwoOUs() {
+	joined := time.Unix(1700000000, 0).UTC()
+	s.insertSession(joined)
+	s.record("ou-x", "tfid-x", joined)
+	s.record("ou-y", "tfid-y", joined.Add(time.Minute))
+
+	s.Equal(1, s.count(queryCountLiveSessionsByApp, "app-1", joined, testDeploymentID))
+}
+
+// A session is listed under an organization unit only while an application signed in under it, and once
+// however many applications did.
+func (s *ParticipantSchemaTestSuite) TestTheInOUQueriesMatchOnlyTheOUsSessions() {
+	joined := time.Unix(1700000000, 0).UTC()
+	s.insertSession(joined)
+	s.record("ou-x", "tfid-x", joined)
+	s.record("ou-y", "tfid-y", joined.Add(time.Minute))
+	_, err := s.db.Exec(queryUpsertParticipant.Query,
+		"sess-1", testDeploymentID, "app-2", "ou-x", joined, joined, "tfid-2")
+	s.Require().NoError(err)
+
+	s.Equal(1, s.count(queryCountLiveSessionsBySubjectInOU, "user-1", joined, testDeploymentID, "ou-x"))
+	s.Equal(0, s.count(queryCountLiveSessionsBySubjectInOU, "user-1", joined, testDeploymentID, "ou-z"))
+	s.Equal(1, s.count(queryCountLiveSessionsByAppInOU, "app-1", joined, testDeploymentID, "ou-y"))
+	s.Equal(0, s.count(queryCountLiveSessionsByAppInOU, "app-2", joined, testDeploymentID, "ou-y"))
+
+	for _, tc := range []struct {
+		query model.DBQuery
+		key   string
+		ouID  string
+		want  int
+	}{
+		{queryListLiveSessionsBySubjectInOU, "user-1", "ou-x", 1},
+		{queryListLiveSessionsBySubjectInOU, "user-1", "ou-z", 0},
+		{queryListLiveSessionsByAppInOU, "app-1", "ou-y", 1},
+		{queryListLiveSessionsByAppInOU, "app-2", "ou-y", 0},
+	} {
+		rows, err := s.db.Query(tc.query.Query, tc.key, joined, 30, 0, testDeploymentID, tc.ouID)
+		s.Require().NoError(err)
+		got := 0
+		for rows.Next() {
+			got++
+		}
+		s.Require().NoError(rows.Err())
+		s.Require().NoError(rows.Close())
+		s.Equal(tc.want, got, "%s under %s", tc.key, tc.ouID)
+	}
+}

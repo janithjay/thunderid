@@ -82,6 +82,18 @@ type Service interface {
 	// row, deleting the session itself only when the application was its last participant. It is
 	// idempotent, returning nil when the application participates in none.
 	DetachApplication(ctx context.Context, appID string) error
+
+	// ListLiveBySubject returns one page of the subject's live sessions at now, most recently active first,
+	// each with the applications that have joined it. A non-empty ouID keeps only the sessions with an
+	// application signed in under that organization unit, and only those participants. The sessions carry
+	// the handle, so callers must never expose it.
+	ListLiveBySubject(ctx context.Context, subjectID, ouID string, now time.Time, limit, offset int) (
+		*SessionPage, error)
+	// ListLiveByApp returns one page of the live sessions at now that the application has joined, most
+	// recently active first, each with the applications that have joined it. A non-empty ouID keeps only
+	// the sessions the application joined under that organization unit, and only the participants signed in
+	// under it.
+	ListLiveByApp(ctx context.Context, appID, ouID string, now time.Time, limit, offset int) (*SessionPage, error)
 }
 
 // LoadCheckpointInput carries what a Session join needs to restore a checkpoint. Session and Context
@@ -697,6 +709,40 @@ func (s *service) DetachApplication(ctx context.Context, appID string) error {
 	return nil
 }
 
+// ListLiveBySubject implements Service.
+func (s *service) ListLiveBySubject(ctx context.Context, subjectID, ouID string, now time.Time,
+	limit, offset int) (*SessionPage, error) {
+	total, err := s.store.CountLiveBySubject(ctx, subjectID, ouID, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count sessions by subject: %w", err)
+	}
+	if offset >= total {
+		return &SessionPage{Sessions: []SessionDetail{}, TotalResults: total}, nil
+	}
+	sessions, err := s.store.ListLiveBySubject(ctx, subjectID, ouID, now, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions by subject: %w", err)
+	}
+	return s.page(ctx, sessions, total, ouID)
+}
+
+// ListLiveByApp implements Service.
+func (s *service) ListLiveByApp(ctx context.Context, appID, ouID string, now time.Time,
+	limit, offset int) (*SessionPage, error) {
+	total, err := s.store.CountLiveByApp(ctx, appID, ouID, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count sessions by application: %w", err)
+	}
+	if offset >= total {
+		return &SessionPage{Sessions: []SessionDetail{}, TotalResults: total}, nil
+	}
+	sessions, err := s.store.ListLiveByApp(ctx, appID, ouID, now, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions by application: %w", err)
+	}
+	return s.page(ctx, sessions, total, ouID)
+}
+
 // revokeFamilies revokes each participant's token family, so signing out drops all of the login's
 // grants. It is a no-op when no revoker is wired; the revoker skips an empty tfid.
 func (s *service) revokeFamilies(ctx context.Context, participants []Participant) error {
@@ -732,6 +778,32 @@ func (s *service) participantsForTermination(ctx context.Context, sessions []Ses
 		grouped[p.SessionID] = append(grouped[p.SessionID], p)
 	}
 	return grouped
+}
+
+// page attaches the participants to a page of sessions, reading them for the whole page in one query. A
+// non-empty ouID keeps only the participants signed in under that organization unit.
+func (s *service) page(ctx context.Context, sessions []Session, total int, ouID string) (*SessionPage, error) {
+	sessionIDs := make([]string, 0, len(sessions))
+	for _, sess := range sessions {
+		sessionIDs = append(sessionIDs, sess.SessionID)
+	}
+	participants, err := s.store.ListBySessionIDs(ctx, sessionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list session participants: %w", err)
+	}
+	bySession := make(map[string][]Participant, len(sessions))
+	for _, p := range participants {
+		if ouID != "" && p.OUID != ouID {
+			continue
+		}
+		bySession[p.SessionID] = append(bySession[p.SessionID], p)
+	}
+
+	details := make([]SessionDetail, 0, len(sessions))
+	for _, sess := range sessions {
+		details = append(details, SessionDetail{Session: sess, Participants: bySession[sess.SessionID]})
+	}
+	return &SessionPage{Sessions: details, TotalResults: total}, nil
 }
 
 // targetSession returns the session this execution's checkpoints attach to, establishing one when
