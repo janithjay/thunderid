@@ -432,6 +432,11 @@ func TestGetRequiredPermissionForAPI(t *testing.T) {
 		// ---- Session management paths ----
 		{name: "GET /sessions falls back to system", method: http.MethodGet, path: "/sessions", wantPerm: p.Root},
 		{name: "GET /sessions/me self-service", method: http.MethodGet, path: "/sessions/me", wantPerm: ""},
+		{name: "DELETE /sessions/{id} falls back to system", method: http.MethodDelete, path: "/sessions/s-1",
+			wantPerm: p.Root},
+		{name: "DELETE /sessions/me self-service", method: http.MethodDelete, path: "/sessions/me", wantPerm: ""},
+		{name: "DELETE /sessions/me/{id} self-service", method: http.MethodDelete, path: "/sessions/me/s-1",
+			wantPerm: ""},
 
 		// ---- OU tree paths ----
 		{
