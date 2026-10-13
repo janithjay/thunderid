@@ -282,6 +282,8 @@ func InitSystemPermissions(handle string) {
 		{"GET /register/passkey/**", ""},
 		{"POST /register/passkey/**", ""},
 		{"GET /sessions/me", ""},
+		{"DELETE /sessions/me", ""},
+		{"DELETE /sessions/me/**", ""},
 
 		// Organization unit APIs — exact named paths before wildcards.
 		{"GET /organization-units/tree", p.OUView},
