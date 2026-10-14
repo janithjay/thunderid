@@ -164,6 +164,12 @@ vi.mock('@/components/edit-user/EditUserAttributes', () => ({
   },
 }));
 
+vi.mock('@thunderid/configure-sessions', () => ({
+  SessionsPanel: ({filter}: {filter: {userId: string}}) => (
+    <div data-testid="sessions-panel">{`user-sessions:${filter.userId}`}</div>
+  ),
+}));
+
 vi.mock('@/components/edit-user/CredentialsTabPanel', () => ({
   default: ({userId, credentialFields}: {userId: string; credentialFields: {fieldName: string}[]}) => (
     <div data-testid="credentials-tab-panel" data-user-id={userId}>
@@ -469,10 +475,23 @@ describe('UserEditPage', () => {
       const user = userEvent.setup();
       render(<UserEditPage />);
 
-      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['General', 'Attributes', 'Advanced']);
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+        'General',
+        'Attributes',
+        'Sessions',
+        'Advanced',
+      ]);
 
       await user.click(screen.getByRole('tab', {name: 'Advanced'}));
       expect(screen.getByRole('button', {name: /^delete$/i})).toBeInTheDocument();
+    });
+
+    it('shows the sessions of the user on the Sessions tab', async () => {
+      const user = userEvent.setup();
+      render(<UserEditPage />);
+
+      await user.click(screen.getByRole('tab', {name: 'Sessions'}));
+      expect(screen.getByTestId('sessions-panel')).toHaveTextContent('user-sessions:user123');
     });
 
     it('shows the read-only attributes summary and QuickCopy on the General tab', () => {
@@ -837,6 +856,7 @@ describe('UserEditPage', () => {
         'General',
         'Attributes',
         'Credentials',
+        'Sessions',
         'Advanced',
       ]);
     });

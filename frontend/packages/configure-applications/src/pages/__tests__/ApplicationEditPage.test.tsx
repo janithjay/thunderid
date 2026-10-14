@@ -44,6 +44,7 @@ const APPLICATIONS_TRANSLATIONS: Record<string, string> = {
   'applications:edit.page.tabs.flows': 'Flows',
   'applications:edit.page.tabs.customization': 'Customization',
   'applications:edit.page.tabs.token': 'Token',
+  'applications:edit.page.tabs.sessions': 'Sessions',
   'applications:edit.page.tabs.advanced': 'Advanced',
   'applications:edit.page.unsavedChanges': 'You have unsaved changes',
   'applications:edit.page.reset': 'Reset',
@@ -128,6 +129,12 @@ vi.mock('../../components/edit-application/advanced-settings/EditAdvancedSetting
       )}
     </div>
   )),
+}));
+
+vi.mock('@thunderid/configure-sessions', () => ({
+  SessionsPanel: ({filter}: {filter: {appId: string}}) => (
+    <div data-testid="sessions-panel">{`app-sessions:${filter.appId}`}</div>
+  ),
 }));
 
 vi.mock('../../components/edit-application/cimd/CimdDocumentSection', () => ({
@@ -467,6 +474,21 @@ describe('ApplicationEditPage', () => {
   });
 
   describe('Tab Navigation', () => {
+    it('shows the sessions that joined the application on the Sessions tab', async () => {
+      mockUseGetApplication.mockReturnValue({
+        data: mockApplication,
+        isLoading: false,
+        isError: false,
+        error: null,
+      } as UseQueryResult<Application>);
+
+      const user = userEvent.setup();
+      renderComponent();
+
+      await user.click(screen.getByRole('tab', {name: 'Sessions'}));
+      expect(screen.getByTestId('sessions-panel')).toHaveTextContent('app-sessions:test-app-id');
+    });
+
     it('should show the metadata document instead of credentials for a Client ID Metadata Document client', async () => {
       mockUseGetApplication.mockReturnValue({
         data: {

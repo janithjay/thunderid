@@ -9,6 +9,7 @@ import {
   UnsavedChangesBar,
   getInitials,
 } from '@thunderid/components';
+import {SessionsPanel} from '@thunderid/configure-sessions';
 import {useResolveDisplayName} from '@thunderid/hooks';
 import {useLogger} from '@thunderid/logger/react';
 import type {User} from '@thunderid/types';
@@ -400,6 +401,12 @@ export default function UserEditPage() {
       render: () => <CredentialsTabPanel userId={userId!} credentialFields={credentialFields} />,
     });
   }
+
+  tabs.push({
+    key: 'sessions',
+    label: t('users:manageUser.tabs.sessions', 'Sessions'),
+    render: () => <SessionsPanel filter={{userId: userId!}} />,
+  });
 
   if (!user.isReadOnly) {
     tabs.push({

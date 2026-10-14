@@ -2978,6 +2978,7 @@ const translations = {
     'edit.page.tabs.flows': 'Flows',
     'edit.page.tabs.customization': 'Customization',
     'edit.page.tabs.token': 'Token',
+    'edit.page.tabs.sessions': 'Sessions',
     'edit.page.tabs.advanced': 'Advanced',
     'edit.page.unsavedChanges': 'Unsaved changes',
     'edit.page.validation.missingRedirectUri': 'A redirect URI is required.',
@@ -5608,6 +5609,49 @@ const translations = {
     'errors.VCI-2006':
       'The number of credential templates exceeds the supported limit. Use search to narrow the results.',
     'errors.VCI-2007': 'The specified organization unit is not valid.',
+  },
+
+  // ============================================================================
+  // Sessions namespace - SSO session management feature translations
+  // ============================================================================
+  sessions: {
+    'panel.title': 'Active sessions',
+    'panel.userDescription': 'Where this user is signed in. Terminating a session signs it out on that device.',
+    'panel.appDescription':
+      'Sessions that signed in to this application. Terminating a session signs the user out of every application in it.',
+    'panel.loadError': 'Failed to load sessions',
+    'panel.empty': 'No active sessions',
+    'item.lastActive': 'Last active {{time}}',
+    'item.userLastActive': '{{user}}, last active {{time}}',
+    'device.browserOnOs': '{{browser}} on {{os}}',
+    'device.unknown': 'Unknown device',
+    'details.user': 'User',
+    'details.os': 'Operating system',
+    'details.browser': 'Browser',
+    'details.applications': 'Active applications',
+    'details.noApplications': 'None',
+    'details.signedIn': 'Signed in',
+    'details.lastAuthenticated': 'Last entered credentials',
+    'details.lastActive': 'Last active',
+    'details.creationIp': 'Signed in from IP',
+    'details.lastActiveIp': 'IP address',
+    'details.idleExpiresAt': 'Ends if unused at',
+    'details.absoluteExpiresAt': 'Ends at the latest at',
+    'details.notRecorded': 'Not recorded',
+    'terminate.action': 'Terminate',
+    'terminate.title': 'Terminate session',
+    'terminate.message':
+      'The user is signed out on this device, and the tokens this session issued stop working. The next sign-in on it asks for credentials again.',
+    'terminate.confirm': 'Terminate',
+    'terminate.terminating': 'Terminating...',
+    'terminate.success': 'Session terminated',
+    'terminate.error': 'Failed to terminate the session. Please try again.',
+    'terminateAll.action': 'Terminate All',
+    'terminateAll.title': 'Terminate all sessions',
+    'terminateAll.message':
+      'The user is signed out on every device, and the tokens these sessions issued stop working. The next sign-in asks for credentials again.',
+    'terminateAll.success': 'All sessions terminated',
+    'terminateAll.error': 'Failed to terminate the sessions. Please try again.',
   },
 
   // ============================================================================

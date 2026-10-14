@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {PageLoadingAnimation, QueryErrorNotice, ResourceAvatar, UnsavedChangesBar} from '@thunderid/components';
+import {SessionsPanel} from '@thunderid/configure-sessions';
 import {useLogger} from '@thunderid/logger/react';
 import {isEqualIgnoringEmpty} from '@thunderid/utils';
 import {
@@ -359,6 +360,12 @@ export default function ApplicationEditPage() {
             ),
           },
           {
+            key: 'sessions',
+            label: t('applications:edit.page.tabs.sessions'),
+            panel: <SessionsPanel filter={{appId: application.id}} />,
+            hidden: isMcpM2mOnly,
+          },
+          {
             key: 'advanced',
             label: t('applications:edit.page.tabs.advanced'),
             panel: (
@@ -511,6 +518,11 @@ export default function ApplicationEditPage() {
               onValidationChange={setHasValidationErrors}
             />
           ),
+        },
+        {
+          key: 'sessions',
+          label: t('applications:edit.page.tabs.sessions'),
+          panel: <SessionsPanel filter={{appId: application.id}} />,
         },
         {
           key: 'advanced',
