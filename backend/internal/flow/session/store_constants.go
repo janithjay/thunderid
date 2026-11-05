@@ -35,6 +35,7 @@ var (
 			`FROM "SESSION" WHERE HANDLE_ID = $1 AND DEPLOYMENT_ID = $2 AND TYPE = 'SSO'`,
 	}
 
+
 	// queryGetSessionByExecutionID fetches the session established by a given flow execution, or no
 	// rows when that execution has not established one. Used on the fresh join path to attach later
 	// checkpoints to the session an earlier join in the same execution already created.
@@ -55,19 +56,6 @@ var (
 			`LAST_ACTIVE_AT = $3, PROPERTIES = $4, IDLE_EXPIRES_AT = $5, ABSOLUTE_EXPIRES_AT = $6, ` +
 			`STATE = $7, VERSION = VERSION + 1, UPDATED_AT = CURRENT_TIMESTAMP ` +
 			`WHERE SESSION_ID = $8 AND DEPLOYMENT_ID = $9 AND VERSION = $10`,
-	}
-
-	// queryTouchAuthenticatedAt refreshes the session's authentication time after the subject
-	// authenticated again within an existing session (prompt=login, or a max_age the previous
-	// authentication no longer satisfied). It is separate from queryUpdateSession because that
-	// statement carries the optimistic-concurrency guard for liveness updates, whereas this one
-	// records a fact about an authentication that has already happened: losing a race with a
-	// concurrent slide must not discard it.
-	queryTouchAuthenticatedAt = model.DBQuery{
-		ID: "SEQ-SESS-16",
-		Query: `UPDATE "SESSION" SET AUTHENTICATED_AT = $1, LAST_ACTIVE_AT = $2, PROPERTIES = $3, ` +
-			`IDLE_EXPIRES_AT = $4, VERSION = VERSION + 1, UPDATED_AT = CURRENT_TIMESTAMP ` +
-			`WHERE SESSION_ID = $5 AND DEPLOYMENT_ID = $6 AND AUTHENTICATED_AT <= $1`,
 	}
 
 	// queryCreateSessionContext upserts a checkpoint's session context. Re-saving the same checkpoint
@@ -151,6 +139,19 @@ var (
 		ID: "SEQ-SESS-15",
 		Query: `DELETE FROM "SESSION_PARTICIPANT" ` +
 			`WHERE SESSION_ID = $1 AND APP_ID = $2 AND OU_ID = $3 AND DEPLOYMENT_ID = $4`,
+	}
+
+	// queryTouchAuthenticatedAt refreshes the session's authentication time after the subject
+	// authenticated again within an existing session (prompt=login, or a max_age the previous
+	// authentication no longer satisfied). It is separate from queryUpdateSession because that
+	// statement carries the optimistic-concurrency guard for liveness updates, whereas this one
+	// records a fact about an authentication that has already happened: losing a race with a
+	// concurrent slide must not discard it.
+	queryTouchAuthenticatedAt = model.DBQuery{
+		ID: "SEQ-SESS-16",
+		Query: `UPDATE "SESSION" SET AUTHENTICATED_AT = $1, LAST_ACTIVE_AT = $2, PROPERTIES = $3, ` +
+			`IDLE_EXPIRES_AT = $4, VERSION = VERSION + 1, UPDATED_AT = CURRENT_TIMESTAMP ` +
+			`WHERE SESSION_ID = $5 AND DEPLOYMENT_ID = $6 AND AUTHENTICATED_AT <= $1`,
 	}
 
 	// querySlideIdleDeadline refreshes a session's last-active timestamp and idle deadline. It matches
@@ -285,6 +286,16 @@ var (
 			`AND (S.IDLE_EXPIRES_AT IS NULL OR S.IDLE_EXPIRES_AT > $2) ` +
 			`AND (S.ABSOLUTE_EXPIRES_AT IS NULL OR S.ABSOLUTE_EXPIRES_AT > $2) ` +
 			`AND S.DEPLOYMENT_ID = $3`,
+	}
+
+	// queryGetSessionBySessionID fetches a session by its ID, for the session management API, which
+	// never sees the handle.
+	queryGetSessionBySessionID = model.DBQuery{
+		ID: "SEQ-SESS-27",
+		Query: `SELECT SESSION_ID, SUBJECT_ID, FLOW_ID, FLOW_VERSION, FLOW_EXECUTION_ID, HANDLE_ID, ` +
+			`AUTHENTICATED_AT, CREATED_AT, LAST_ACTIVE_AT, IDLE_EXPIRES_AT, ABSOLUTE_EXPIRES_AT, ` +
+			`PROPERTIES, STATE, VERSION ` +
+			`FROM "SESSION" WHERE SESSION_ID = $1 AND DEPLOYMENT_ID = $2`,
 	}
 )
 

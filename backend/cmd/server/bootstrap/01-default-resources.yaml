@@ -137,6 +137,8 @@ resources:
     actions:
       - name: View
         handle: view
+      - name: Delete
+        handle: delete
   - name: Organization
     handle: org
     description: Resources of the organization unit the token names
@@ -225,6 +227,8 @@ resources:
     actions:
       - name: View
         handle: view
+      - name: Delete
+        handle: delete
 ---
 resource_type: flow
 id: 01900000-0000-7000-8000-000000000061

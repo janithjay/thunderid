@@ -82,9 +82,14 @@ func (s *HandlerTestSuite) expectApp(name string) {
 
 // adminRequest is a GET from an administrator holding the given permissions, under ouID when not empty.
 func adminRequest(target, ouID string, permissions ...string) *http.Request {
+	return adminRequestWithMethod(http.MethodGet, target, ouID, permissions...)
+}
+
+// adminRequestWithMethod is adminRequest with the given method.
+func adminRequestWithMethod(method, target, ouID string, permissions ...string) *http.Request {
 	ctx := security.WithSecurityContextTest(context.Background(),
 		security.NewSecurityContextForTest("admin-1", ouID, "", permissions, nil))
-	return httptest.NewRequest(http.MethodGet, target, nil).WithContext(ctx)
+	return httptest.NewRequest(method, target, nil).WithContext(ctx)
 }
 
 func selfContext(attributes map[string]interface{}) context.Context {
@@ -341,7 +346,7 @@ func (s *HandlerTestSuite) TestSelfList_Errors() {
 }
 
 func (s *HandlerTestSuite) TestPreflight() {
-	for _, path := range []string{"/sessions", "/users/me/sessions"} {
+	for _, path := range []string{"/sessions", "/users/me/sessions", "/sessions/sess-1", "/users/me/sessions/sess-1"} {
 		w := s.serve(httptest.NewRequest(http.MethodOptions, path, nil))
 		s.Equal(http.StatusNoContent, w.Code, path)
 	}
@@ -351,4 +356,163 @@ func (s *HandlerTestSuite) TestFormatTime_ZeroIsEmpty() {
 	s.Empty(formatTime(time.Time{}))
 	s.Equal("2026-06-16T10:00:00Z",
 		formatTime(time.Date(2026, 6, 16, 15, 30, 0, 0, time.FixedZone("IST", 5*3600+1800))))
+}
+
+func (s *HandlerTestSuite) TestRevoke_ByID() {
+	s.Run("revoked", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "", "").Return(true, nil).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions/sess-1", "", "system:session:delete"))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+	s.Run("already gone", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-gone", "", "").Return(false, nil).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions/sess-gone", "", "system:session:delete"))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+	s.Run("service error", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "", "").Return(false, errors.New("db down")).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions/sess-1", "", "system:session:delete"))
+		s.Equal(http.StatusInternalServerError, w.Code)
+	})
+}
+
+func (s *HandlerTestSuite) TestRevoke_ByUser() {
+	s.Run("revoked", func() {
+		s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "", "").Return(nil).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions?userId=user-1", "", "system:session:delete"))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+	s.Run("missing userId", func() {
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions?userId=%20", "", "system:session:delete"))
+		s.Equal(http.StatusBadRequest, w.Code)
+		s.Contains(w.Body.String(), ErrorMissingUserID.Code)
+	})
+	s.Run("service error", func() {
+		s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "", "").Return(errors.New("db down")).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions?userId=user-1", "", "system:session:delete"))
+		s.Equal(http.StatusInternalServerError, w.Code)
+	})
+}
+
+// An administrator holding only the org permission revokes within the organization unit its token names,
+// and is refused when the token names none.
+func (s *HandlerTestSuite) TestRevoke_OrgAdminIsConfinedToItsOU() {
+	s.Run("by id", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "", "ou-1").Return(false, nil).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions/sess-1", "ou-1", "org:session:delete"))
+		s.Equal(http.StatusNoContent, w.Code, "a session out of reach is a 204 as a gone one is")
+	})
+	s.Run("by user", func() {
+		s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "ou-1", "").Return(nil).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions?userId=user-1", "ou-1",
+			"org:session:delete"))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+	s.Run("system permission reaches every unit", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "", "").Return(true, nil).Once()
+		w := s.serve(adminRequestWithMethod(http.MethodDelete, "/sessions/sess-1", "ou-1", "system:session:delete"))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+	for _, target := range []string{"/sessions/sess-1", "/sessions?userId=user-1"} {
+		s.Run("no unit "+target, func() {
+			w := s.serve(adminRequestWithMethod(http.MethodDelete, target, "", "org:session:delete"))
+			s.Equal(http.StatusForbidden, w.Code)
+		})
+	}
+}
+
+// A token that names an organization unit revokes only the sessions its own list shows.
+func (s *HandlerTestSuite) TestRevokeSelf_TokenWithAUnit() {
+	ctx := security.WithSecurityContextTest(context.Background(),
+		security.NewSecurityContextForTest("user-1", "ou-1", "", nil, nil))
+	s.Run("by id", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "user-1", "ou-1").Return(false, nil).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions/sess-1", nil).WithContext(ctx))
+		s.Equal(http.StatusNotFound, w.Code)
+	})
+	s.Run("all", func() {
+		s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "ou-1", "").Return(nil).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions", nil).WithContext(ctx))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+}
+
+func (s *HandlerTestSuite) TestRevokeSelf_ByID() {
+	s.Run("revoked", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "user-1", "").Return(true, nil).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions/sess-1", nil).
+			WithContext(selfContext(nil)))
+		s.Equal(http.StatusNoContent, w.Code)
+	})
+	s.Run("missing or another user's", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-2", "user-1", "").Return(false, nil).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions/sess-2", nil).
+			WithContext(selfContext(nil)))
+		s.Equal(http.StatusNotFound, w.Code)
+		s.Contains(w.Body.String(), ErrorSessionNotFound.Code)
+	})
+	s.Run("no subject", func() {
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions/sess-1", nil))
+		s.Equal(http.StatusUnauthorized, w.Code)
+	})
+	s.Run("service error", func() {
+		s.svc.EXPECT().RevokeSession(mock.Anything, "sess-1", "user-1", "").Return(false, errors.New("db down")).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions/sess-1", nil).
+			WithContext(selfContext(nil)))
+		s.Equal(http.StatusInternalServerError, w.Code)
+	})
+}
+
+func (s *HandlerTestSuite) TestRevokeSelf_All() {
+	withTokenFamily := map[string]interface{}{"tfid": "tfid-current"}
+	tests := []struct {
+		name       string
+		query      string
+		attributes map[string]interface{}
+		keep       string
+	}{
+		{"all", "", withTokenFamily, ""},
+		{"exceptCurrent false", "?exceptCurrent=false", withTokenFamily, ""},
+		{"exceptCurrent true", "?exceptCurrent=true", withTokenFamily, "tfid-current"},
+	}
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "", tc.keep).Return(nil).Once()
+			w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions"+tc.query, nil).
+				WithContext(selfContext(tc.attributes)))
+			s.Equal(http.StatusNoContent, w.Code)
+		})
+	}
+	s.Run("exceptCurrent without a token family", func() {
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions?exceptCurrent=true", nil).
+			WithContext(selfContext(nil)))
+		s.Equal(http.StatusBadRequest, w.Code)
+		s.Contains(w.Body.String(), ErrorCurrentSessionUnknown.Code)
+	})
+	s.Run("exceptCurrent with a token family no session holds", func() {
+		s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "", "tfid-current").
+			Return(flowsession.ErrTokenFamilyNotInSession).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions?exceptCurrent=true", nil).
+			WithContext(selfContext(withTokenFamily)))
+		s.Equal(http.StatusBadRequest, w.Code)
+		s.Contains(w.Body.String(), ErrorCurrentSessionUnknown.Code)
+	})
+	for _, value := range []string{"maybe", "1", "TRUE"} {
+		s.Run("invalid exceptCurrent "+value, func() {
+			w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions?exceptCurrent="+value, nil).
+				WithContext(selfContext(withTokenFamily)))
+			s.Equal(http.StatusBadRequest, w.Code)
+			s.Contains(w.Body.String(), ErrorInvalidExceptCurrent.Code)
+		})
+	}
+	s.Run("no subject", func() {
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions", nil))
+		s.Equal(http.StatusUnauthorized, w.Code)
+	})
+	s.Run("service error", func() {
+		s.svc.EXPECT().RevokeSubjectSessions(mock.Anything, "user-1", "", "").Return(errors.New("db down")).Once()
+		w := s.serve(httptest.NewRequest(http.MethodDelete, "/users/me/sessions", nil).
+			WithContext(selfContext(nil)))
+		s.Equal(http.StatusInternalServerError, w.Code)
+	})
 }

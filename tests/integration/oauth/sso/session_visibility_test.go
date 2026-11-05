@@ -278,7 +278,7 @@ func (ts *SSOLogoutTestSuite) TestSessionAPI_SessionViewPermissionListsOthers() 
 // An application shared into a child organization unit joins the user's session under it, as an organization
 // switch does. An administrator with org:session:view in the child sees the session with only the child's
 // participant, the user's token in each unit sees only that unit's participant, and system:session:view sees
-// both.
+// both. Revoking the session from the child ends it in both units.
 func (ts *SSOLogoutTestSuite) TestSessionAPI_OrgAdminSeesOnlyItsOU() {
 	const (
 		listedUser = "sso_visibility_ou_user"
@@ -362,6 +362,15 @@ func (ts *SSOLogoutTestSuite) TestSessionAPI_OrgAdminSeesOnlyItsOU() {
 		ts.Require().Len(own.Sessions[0].Participants, 1, "the user's %s token sees only its unit", tc.name)
 		ts.Equal(tc.ouID, own.Sessions[0].Participants[0].OUID, tc.name)
 	}
+
+	// Revoking from one unit ends the whole session, signing the user out of the other unit too.
+	status, raw = ts.deleteSessions(testutils.GetHTTPClientWithToken(childToken),
+		"/users/me/sessions/"+url.PathEscape(all.Sessions[0].ID))
+	ts.Require().Equal(http.StatusNoContent, status, raw)
+	var after sessionListView
+	status, raw = ts.getSessions(testutils.GetHTTPClient(), "/sessions?userId="+url.QueryEscape(userID), &after)
+	ts.Require().Equal(http.StatusOK, status, raw)
+	ts.Zero(after.TotalResults, raw)
 }
 
 // Both listings need an access token.

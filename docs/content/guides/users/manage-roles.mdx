@@ -75,7 +75,7 @@ The **System** resource server declares the permissions for managing <ProductNam
 | `authzdetail` | [Authorization Detail Types](../../intents) | `view`, `create`, `update`, `delete` |
 | `serverconfig` | Server Configuration | `view`, `update` |
 | `configversion` | Configuration Versions | `view`, `create` |
-| `session` | Sessions | `view` |
+| `session` | Sessions | `view`, `delete` |
 
 Design, translations, gateways, authorization detail types, server configuration, and configuration versions have no owning organization unit, so a change to one affects every organization unit. A configuration version holds a snapshot of the whole deployment, so once a management API accepts `system:configversion:view`, it will expose the configuration of every organization unit. No management API accepts that permission yet.
 
@@ -106,7 +106,7 @@ The `flow`, `role`, `rs`, `authzdetail`, and `app` permissions are high impact. 
 
 `system:serverconfig:update` changes deployment-wide security settings such as CORS, the content security policy, and sessions.
 
-`org:session:view` lists the SSO sessions that have an application signed in under the organization unit the caller holds it in, and shows only those applications. A session's own details, such as its last active time and IP address, come from activity in every organization unit. `system:session:view` lists the SSO sessions of every user and application in the deployment. Only a data plane serves sessions. Users list their own sessions without any system permission. When their token names an organization unit, they see only the sessions and applications of that organization unit.
+`org:session:view` lists the SSO sessions that have an application signed in under the organization unit the caller holds it in, showing only those applications. `org:session:delete` revokes those sessions. Revoking ends the whole session, so the user is also signed out of its applications in other organization units. A session's own details, such as its last active time and IP address, come from activity in every organization unit. `system:session:view` lists the SSO sessions of every user and application in the deployment, and `system:session:delete` revokes them. Only a data plane serves sessions. Users list and revoke their own sessions without any system permission. When their token names an organization unit, they see and revoke only the sessions and applications of that organization unit.
 
 The MCP tools require the same permissions as the matching APIs. The MCP server itself requires a token that carries at least one system permission.
 

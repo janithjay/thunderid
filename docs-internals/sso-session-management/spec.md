@@ -38,7 +38,7 @@ Out of scope:
 | Session service | Writes the client metadata, lists live sessions with their participants, and revokes sessions through the termination path that sign-out uses |
 | Session store | Persists the metadata in `SESSION.PROPERTIES`, and pages and counts live sessions by subject or by application |
 | `sessionmgt` package | The session management API under `backend/internal/flow/session/mgt`: routes, request validation, current session marking, and name resolution |
-| Security middleware | Requires `org:session:view` or `system:session:delete` on the administrator routes, and only a signed-in user on the `/users/me/sessions` routes |
+| Security middleware | Requires `org:session:view` or `org:session:delete` on the administrator routes, and only a signed-in user on the `/users/me/sessions` routes |
 | `configure-sessions` package | The Sessions panel the Console and the Admin Console show on the user and application edit pages |
 | Access log | Adds the resolved client IP as the last field of each line |
 
@@ -168,13 +168,13 @@ ALTER TABLE "SESSION" ADD COLUMN PROPERTIES TEXT;
 | Method and path | Caller | Behavior |
 |---|---|---|
 | `GET /sessions?userId=` or `?appId=` | Administrator, `org:session:view` | One page of the user's live sessions, or of the live sessions the application has joined. Exactly one filter is required. An administrator confined to an organization unit gets only the sessions with an application signed in under it, with only those applications |
-| `DELETE /sessions?userId=` | Administrator, `system:session:delete` | Revokes every session of the user. `204`, also when there were none |
-| `DELETE /sessions/{sessionId}` | Administrator, `system:session:delete` | Revokes the session. `204`, also when it was already gone |
+| `DELETE /sessions?userId=` | Administrator, `org:session:delete` | Revokes every session of the user. An administrator confined to an organization unit revokes only those with an application signed in under it. `204`, also when there were none |
+| `DELETE /sessions/{sessionId}` | Administrator, `org:session:delete` | Revokes the session. An administrator confined to an organization unit revokes it only when an application signed in to it under that unit. `204`, also when it was already gone or out of reach |
 | `GET /users/me/sessions` | Any signed-in user | One page of the caller's live sessions, each with `isCurrent`. A token that names an organization unit gets only the sessions with an application signed in under it, and only those participants. User names are not resolved |
-| `DELETE /users/me/sessions` | Any signed-in user | Revokes the caller's sessions. `exceptCurrent=true` keeps the current one |
-| `DELETE /users/me/sessions/{sessionId}` | Any signed-in user | Revokes one of the caller's sessions. `404` when the caller has no such session |
+| `DELETE /users/me/sessions` | Any signed-in user | Revokes the caller's sessions that `GET /users/me/sessions` lists for the same token. `exceptCurrent=true` keeps the current one |
+| `DELETE /users/me/sessions/{sessionId}` | Any signed-in user | Revokes one of the caller's sessions. `404` when the caller has no such session, or when the token names an organization unit no application of it signed in under |
 
-The administrator routes have their own permissions, as `/applications` and `/roles` do. A `session` resource with the actions `view` and `delete` is added under `system` on the System resource server, giving `system:session:view` and `system:session:delete`, and a `session` resource with the action `view` under `org`, giving `org:session:view`. Listing requires `org:session:view`, which reaches the organization unit the token names: the sessions with an application signed in under it, and only those participants. A permission declared under `system` satisfies the one at the same place under `org` in every organization unit, so `system:session:view` lists every session. Revoking requires `system:session:delete`. A role that holds `system`, such as the Administrator role, holds all of them. Only the Data Plane serves sessions, so the Control Plane declares no session permission and leaves the routes out. The self-service routes take the user from the access token and accept no user id. The permission table maps `GET /users/me/**` and the two `DELETE /users/me/sessions` routes to no permission, and the `DELETE` entries are narrow so they don't open `DELETE /users/me`.
+The administrator routes have their own permissions, as `/applications` and `/roles` do. A `session` resource with the actions `view` and `delete` is added under `system` on the System resource server, giving `system:session:view` and `system:session:delete`, and a `session` resource with the same actions under `org`, giving `org:session:view` and `org:session:delete`. Listing requires `org:session:view`, which reaches the organization unit the token names: the sessions with an application signed in under it, and only those participants. A permission declared under `system` satisfies the one at the same place under `org` in every organization unit, so `system:session:view` lists every session. Revoking requires `org:session:delete` and, under an organization unit, reaches the sessions with an application signed in under it. It ends such a session whole, so the user is also signed out of its applications in other units. `system:session:delete` revokes any session. A role that holds `system`, such as the Administrator role, holds all of them. Only the Data Plane serves sessions, so the Control Plane declares no session permission and leaves the routes out. The self-service routes take the user from the access token and accept no user id. The permission table maps `GET /users/me/**` and the two `DELETE /users/me/sessions` routes to no permission, and the `DELETE` entries are narrow so they don't open `DELETE /users/me`.
 
 Each session in a response carries `id`, `userId`, `userName` (administrator listing only), `userAgent`, `creationIp`, `lastActiveIp`, `authenticatedAt`, `createdAt`, `lastActiveAt`, `idleExpiresAt`, `absoluteExpiresAt`, `isCurrent` (self-service listing only), and `participants`, each with `appId`, `ouId`, `appName`, `appLogoUrl`, `firstJoinedAt` and `lastActiveAt`. An application signed in under two organization units, such as after an organization switch, is two participants of the same session. A value that wasn't recorded or can't be resolved is left out.
 
@@ -210,7 +210,7 @@ The `configure-sessions` package provides a Sessions panel, shown as a tab on th
 - Each session shows the browser, operating system and device described from its User-Agent, its last-active IP, when it was last active, and its applications. The User-Agent the mobile SDKs send is recognized as a native app.
 - The creation IP is shown as well when it differs from the last-active IP. On an application's panel, a user whose name can't be resolved is shown by their user id.
 - A revocation asks for confirmation first, and the list refreshes after it.
-- An administrator without `org:session:view` sees a message that they don't have permission to view the sessions, with no retry. A revocation refused for want of `system:session:delete` shows the same kind of message in the confirmation dialog.
+- An administrator without `org:session:view` sees a message that they don't have permission to view the sessions, with no retry. A revocation refused for want of `org:session:delete` shows the same kind of message in the confirmation dialog.
 
 ### Configuration
 
@@ -313,7 +313,8 @@ The key is also exposed through the Helm chart as `configuration.server.trustedP
 - **AC8.1:** Given a live session, when an administrator calls `DELETE /sessions/{id}`, then it returns `204`, the session no longer appears in a listing, and the next sign-in to its applications asks for credentials.
 - **AC8.2:** Given a user with several sessions, when an administrator calls `DELETE /sessions?userId=<id>`, then every session of the user is revoked.
 - **AC8.3:** Given a session that is already gone, when an administrator revokes it, then it returns `204`.
-- **AC8.4:** Given a caller with `system:session:view` but without `system:session:delete`, when they call `DELETE /sessions/{id}` or `DELETE /sessions?userId=<id>`, then it returns `403` and nothing is revoked.
+- **AC8.4:** Given a caller with `system:session:view` but without `org:session:delete` or `system:session:delete`, when they call `DELETE /sessions/{id}` or `DELETE /sessions?userId=<id>`, then it returns `403` and nothing is revoked.
+- **AC8.5:** Given a session with an application signed in under two organization units and a caller with `org:session:delete` whose token names one of them, when they call `DELETE /sessions/{id}`, then the whole session is revoked. When the token names a unit none of its applications signed in under, it returns `204` and nothing is revoked.
 
 ### R9. End my own sessions
 
@@ -325,6 +326,7 @@ The key is also exposed through the Helm chart as `configuration.server.trustedP
 - **AC9.2:** Given another user's session id, when the caller calls `DELETE /users/me/sessions/{id}`, then it returns `404` with `SSM-1007` and the session is not revoked.
 - **AC9.3:** Given a caller with several sessions, when they call `DELETE /users/me/sessions?exceptCurrent=true`, then every session but the current one is revoked and the caller stays signed in.
 - **AC9.4:** Given an access token that identifies no session of the caller, when they call `DELETE /users/me/sessions?exceptCurrent=true`, then it returns `400` with `SSM-1006` and nothing is revoked.
+- **AC9.5:** Given a token that names an organization unit, when the caller calls `DELETE /users/me/sessions/{id}` for one of their sessions with no application signed in under that unit, then it returns `404` with `SSM-1007` and the session is not revoked.
 
 ### R10. A revoked session is over everywhere
 
@@ -363,4 +365,4 @@ The key is also exposed through the Helm chart as `configuration.server.trustedP
 |---|---|---|
 | 0.1 | 2026-11-04 | Initial specification, from design discussion #4130 and the session table in #6322, as built in #5575, #6150, #6152 and #6159. |
 | 0.2 | 2026-11-16 | Participants carry the application's logo URL, and both listings resolve names and logos regardless of the caller's user and application permissions. |
-| 0.3 | 2026-11-22 | Session listing by organization unit: `org:session:view`, satisfied in every unit by `system:session:view`, the self-service listing confined to the unit its token names, and the participant's `ouId`. |
+| 0.3 | 2026-11-22 | Sessions by organization unit: `org:session:view` and `org:session:delete`, satisfied in every unit by their `system` permissions, the self-service routes confined to the unit their token names, and the participant's `ouId`. |

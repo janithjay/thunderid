@@ -98,17 +98,23 @@ func (s *DataPlanePermissionsTestSuite) TestDeclaresNoProjectPermission() {
 	}
 }
 
-// Only the Data Plane serves sessions. The session listing requires the org permission, which the system one
-// satisfies in every organization unit, and the self-service session routes stay open to any authenticated
+// Only the Data Plane serves sessions. The session routes require the org permissions, which the system ones
+// satisfy in every organization unit, and the self-service session routes stay open to any authenticated
 // caller.
 func (s *DataPlanePermissionsTestSuite) TestSessionPermissionsAreUnderOrgAndSystem() {
 	s.Equal("org:session:view", GetSystemPermissions().SessionView)
+	s.Equal("org:session:delete", GetSystemPermissions().SessionDelete)
 	s.Contains(GetSystemPermissions().Catalog, "system:session:view")
+	s.Contains(GetSystemPermissions().Catalog, "system:session:delete")
 
 	svc, err := newSecurityService(nil, nil, []string{}, apiPermissionEntries)
 	s.Require().NoError(err)
 	s.Equal("org:session:view", svc.getRequiredPermissionForAPI(http.MethodGet, "/sessions"))
+	s.Equal("org:session:delete", svc.getRequiredPermissionForAPI(http.MethodDelete, "/sessions"))
+	s.Equal("org:session:delete", svc.getRequiredPermissionForAPI(http.MethodDelete, "/sessions/s-1"))
 	s.Equal("", svc.getRequiredPermissionForAPI(http.MethodGet, "/users/me/sessions"))
+	s.Equal("", svc.getRequiredPermissionForAPI(http.MethodDelete, "/users/me/sessions"))
+	s.Equal("", svc.getRequiredPermissionForAPI(http.MethodDelete, "/users/me/sessions/s-1"))
 }
 
 func (s *DataPlanePermissionsTestSuite) TestDeploymentWideReadsRequireOrgAndWritesRequireSystem() {
@@ -162,8 +168,8 @@ func (s *DataPlanePermissionsTestSuite) TestCatalogIsTheOrgTreeAndTheSystemChild
 		"org:usertype:delete",
 		"org:agenttype", "org:agenttype:view", "org:agenttype:create", "org:agenttype:update",
 		"org:agenttype:delete",
-		"org:session", "org:session:view",
-		"system:session", "system:session:view",
+		"org:session", "org:session:view", "org:session:delete",
+		"system:session", "system:session:view", "system:session:delete",
 	}, p.Catalog)
 }
 

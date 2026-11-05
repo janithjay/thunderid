@@ -5,6 +5,7 @@ package sessionmgt
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -57,15 +58,9 @@ func (h *sessionMgtHandler) HandleSessionListRequest(w http.ResponseWriter, r *h
 		handleError(ctx, w, svcErr)
 		return
 	}
-	// A caller whose permission reaches every organization unit sees every session. Any other caller sees
-	// only the sessions with an application signed in under the unit its token names, and only those
-	// applications. The security middleware refuses such a caller when its token names no unit.
-	ouID := ""
-	if !security.ReachesDeployment(security.GetPermissions(ctx), security.GetSystemPermissions().SessionView) {
-		if ouID = security.GetOUID(ctx); ouID == "" {
-			sysutils.WriteErrorResponse(ctx, w, http.StatusForbidden, apierror.ErrForbidden)
-			return
-		}
+	ouID, ok := confinedOU(ctx, w, security.GetSystemPermissions().SessionView)
+	if !ok {
+		return
 	}
 
 	var (
@@ -138,6 +133,118 @@ func (h *sessionMgtHandler) HandleSelfSessionListRequest(w http.ResponseWriter, 
 	}
 	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK,
 		buildListResponse(sessions, page.TotalResults, "/users/me/sessions", limit, offset, ""))
+}
+
+// HandleSessionRevokeRequest handles DELETE /sessions/{id}. An administrator confined to an organization unit
+// ends the whole session when an application signed in to it under that unit. It responds 204 even when the
+// session is already gone or out of the caller's reach.
+func (h *sessionMgtHandler) HandleSessionRevokeRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ouID, ok := confinedOU(ctx, w, security.GetSystemPermissions().SessionDelete)
+	if !ok {
+		return
+	}
+	if _, err := h.svc.RevokeSession(ctx, r.PathValue("id"), "", ouID); err != nil {
+		h.logger.Error(ctx, "Failed to revoke session", log.Error(err))
+		handleError(ctx, w, &tidcommon.InternalServerError)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusNoContent, nil)
+}
+
+// HandleUserSessionsRevokeRequest handles DELETE /sessions?userId=: every session of the user, or for an
+// administrator confined to an organization unit, every one with an application signed in under it.
+func (h *sessionMgtHandler) HandleUserSessionsRevokeRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
+	if userID == "" {
+		handleError(ctx, w, &ErrorMissingUserID)
+		return
+	}
+	ouID, ok := confinedOU(ctx, w, security.GetSystemPermissions().SessionDelete)
+	if !ok {
+		return
+	}
+	if err := h.svc.RevokeSubjectSessions(ctx, userID, ouID, ""); err != nil {
+		h.logger.Error(ctx, "Failed to revoke user sessions", log.Error(err))
+		handleError(ctx, w, &tidcommon.InternalServerError)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusNoContent, nil)
+}
+
+// HandleSelfSessionRevokeRequest handles DELETE /users/me/sessions/{id}. A session that is missing, belongs
+// to someone else, or has no application signed in under the organization unit the token names is a 404
+// alike, so session IDs can't be probed.
+func (h *sessionMgtHandler) HandleSelfSessionRevokeRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	subject := security.GetSubject(ctx)
+	if strings.TrimSpace(subject) == "" {
+		sysutils.WriteErrorResponse(ctx, w, http.StatusUnauthorized, apierror.ErrUnauthorized)
+		return
+	}
+	found, err := h.svc.RevokeSession(ctx, r.PathValue("id"), subject, security.GetOUID(ctx))
+	if err != nil {
+		h.logger.Error(ctx, "Failed to revoke own session", log.Error(err))
+		handleError(ctx, w, &tidcommon.InternalServerError)
+		return
+	}
+	if !found {
+		handleError(ctx, w, &ErrorSessionNotFound)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusNoContent, nil)
+}
+
+// HandleSelfSessionsRevokeRequest handles DELETE /users/me/sessions: every session of the caller that its
+// own list shows, or with exceptCurrent=true every one but the session the caller's access token was issued
+// in.
+func (h *sessionMgtHandler) HandleSelfSessionsRevokeRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	subject := security.GetSubject(ctx)
+	if strings.TrimSpace(subject) == "" {
+		sysutils.WriteErrorResponse(ctx, w, http.StatusUnauthorized, apierror.ErrUnauthorized)
+		return
+	}
+	v := r.URL.Query().Get("exceptCurrent")
+	if v != "" && v != "true" && v != "false" {
+		handleError(ctx, w, &ErrorInvalidExceptCurrent)
+		return
+	}
+	exceptCurrent := v == "true"
+	var keepTokenFamilyID string
+	if exceptCurrent {
+		keepTokenFamilyID, _ = security.GetAttribute(ctx, oauth2const.ClaimTokenFamilyID).(string)
+		if keepTokenFamilyID == "" {
+			handleError(ctx, w, &ErrorCurrentSessionUnknown)
+			return
+		}
+	}
+	if err := h.svc.RevokeSubjectSessions(ctx, subject, security.GetOUID(ctx), keepTokenFamilyID); err != nil {
+		if errors.Is(err, flowsession.ErrTokenFamilyNotInSession) {
+			handleError(ctx, w, &ErrorCurrentSessionUnknown)
+			return
+		}
+		h.logger.Error(ctx, "Failed to revoke own sessions", log.Error(err))
+		handleError(ctx, w, &tidcommon.InternalServerError)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusNoContent, nil)
+}
+
+// confinedOU returns the organization unit an administrator's session request is confined to: "" when
+// its permissions reach every unit through required, or else the unit its token names. It writes 403 and
+// returns false when the token names none; the security middleware refuses such a caller already.
+func confinedOU(ctx context.Context, w http.ResponseWriter, required string) (string, bool) {
+	if security.ReachesDeployment(security.GetPermissions(ctx), required) {
+		return "", true
+	}
+	ouID := security.GetOUID(ctx)
+	if ouID == "" {
+		sysutils.WriteErrorResponse(ctx, w, http.StatusForbidden, apierror.ErrForbidden)
+		return "", false
+	}
+	return ouID, true
 }
 
 // userNames resolves the display name of each distinct user across the sessions, once per user. A
@@ -261,6 +368,9 @@ func handleError(ctx context.Context, w http.ResponseWriter, svcErr *tidcommon.S
 	statusCode := http.StatusInternalServerError
 	if svcErr.Type == tidcommon.ClientErrorType {
 		statusCode = http.StatusBadRequest
+		if svcErr.Code == ErrorSessionNotFound.Code {
+			statusCode = http.StatusNotFound
+		}
 	}
 
 	sysutils.WriteErrorResponse(ctx, w, statusCode, apierror.ErrorResponse{
