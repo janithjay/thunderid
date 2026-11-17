@@ -103,7 +103,8 @@ func (s *HandlerTestSuite) TestList_ByUser() {
 	s.svc.EXPECT().ListLiveBySubject(mock.Anything, "user-1", mock.AnythingOfType("time.Time"), 30, 0).
 		Return(&flowsession.SessionPage{Sessions: []flowsession.SessionDetail{detail}, TotalResults: 1}, nil)
 	s.expectUser("user-1", "Alice")
-	s.expectApp("App A")
+	s.apps.EXPECT().GetApplication(mock.Anything, "app-a").
+		Return(&providers.Application{Name: "App A", LogoURL: "https://example.com/app-a.png"}, nil).Once()
 	s.apps.EXPECT().GetApplication(mock.Anything, "app-b").Return(nil, &tidcommon.InternalServerError).Once()
 
 	w := s.serve(httptest.NewRequest(http.MethodGet, "/sessions?userId=user-1", nil))
@@ -127,7 +128,7 @@ func (s *HandlerTestSuite) TestList_ByUser() {
 	s.Equal("2026-06-16T18:00:00Z", got.AbsoluteExpiresAt)
 	s.Nil(got.IsCurrent, "admin listings don't mark a current session")
 	s.Equal([]participantResponse{
-		{AppID: "app-a", AppName: "App A", FirstJoinedAt: "", LastActiveAt: ""},
+		{AppID: "app-a", AppName: "App A", AppLogoURL: "https://example.com/app-a.png"},
 		{AppID: "app-b"},
 	}, got.Participants)
 }
@@ -232,6 +233,25 @@ func (s *HandlerTestSuite) TestSelfList_TokenWithoutFamilyMarksNothing() {
 	s.Require().Len(body.Sessions, 1)
 	s.Require().NotNil(body.Sessions[0].IsCurrent)
 	s.False(*body.Sessions[0].IsCurrent, "an empty participant tfid must not match a token without one")
+}
+
+func (s *HandlerTestSuite) TestSelfList_ResolvesAppsAsRuntime() {
+	page := &flowsession.SessionPage{
+		Sessions:     []flowsession.SessionDetail{sampleDetail("sess-1", flowsession.Participant{AppID: "app-a"})},
+		TotalResults: 1,
+	}
+	s.svc.EXPECT().ListLiveBySubject(mock.Anything, "user-1", mock.Anything, 30, 0).Return(page, nil)
+	s.apps.EXPECT().GetApplication(mock.MatchedBy(security.IsRuntimeContext), "app-a").
+		Return(&providers.Application{Name: "App A", LogoURL: "https://example.com/app-a.png"}, nil).Once()
+
+	w := s.serve(httptest.NewRequest(http.MethodGet, "/users/me/sessions", nil).WithContext(selfContext(nil)))
+
+	s.Equal(http.StatusOK, w.Code)
+	body := decode[sessionListResponse](s, w)
+	s.Require().Len(body.Sessions, 1)
+	s.Require().Len(body.Sessions[0].Participants, 1)
+	s.Equal("App A", body.Sessions[0].Participants[0].AppName)
+	s.Equal("https://example.com/app-a.png", body.Sessions[0].Participants[0].AppLogoURL)
 }
 
 func (s *HandlerTestSuite) TestSelfList_Errors() {

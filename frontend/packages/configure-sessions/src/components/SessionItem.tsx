@@ -6,7 +6,10 @@ import {ChevronDown, Monitor, Smartphone} from '@wso2/oxygen-ui-icons-react';
 import type {JSX, ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Link as RouterLink} from 'react-router';
+import LiveDuration from './LiveDuration';
 import PlatformIcon from './PlatformIcon';
+import SessionApplications from './SessionApplications';
+import useNow from '../hooks/useNow';
 import useSessionRoutes from '../hooks/useSessionRoutes';
 import type {Session} from '../models/session';
 import describeUserAgent from '../utils/describeUserAgent';
@@ -33,11 +36,32 @@ function DetailField({label, children}: {label: string; children: ReactNode}): J
 }
 
 /**
+ * When the session was last active, relative to now, such as "5 minutes ago". It is its own component so
+ * that its once-a-minute refresh re-renders only this line.
+ */
+function LastActive({session, showUser}: {session: Session; showUser: boolean}): JSX.Element {
+  const {t, i18n} = useTranslation('sessions');
+  const now = useNow(60 * 1000);
+  const time = formatRelativeTime(session.lastActiveAt, i18n.language, new Date(now));
+
+  return (
+    <Typography variant="caption" color="text.secondary" component="div" noWrap>
+      {showUser
+        ? t('item.userLastActive', '{{user}}, latest SSO {{time}}', {
+            user: session.userName ?? session.userId,
+            time,
+          })
+        : t('item.lastActive', 'Latest SSO {{time}}', {time})}
+    </Typography>
+  );
+}
+
+/**
  * One session as an expandable card: the device, when it was last active and the action to revoke it,
  * and when expanded, everything recorded about it.
  */
 export default function SessionItem({session, expanded, onToggle, showUser, onRevoke}: SessionItemProps): JSX.Element {
-  const {t, i18n} = useTranslation('sessions');
+  const {t} = useTranslation('sessions');
   const routes = useSessionRoutes();
   const notRecorded = t('details.notRecorded', 'Not recorded');
   const {browser, os, device: model, mobile, app} = describeUserAgent(session.userAgent);
@@ -53,13 +77,22 @@ export default function SessionItem({session, expanded, onToggle, showUser, onRe
   } else {
     device = client ?? os ?? t('device.unknown', 'Unknown device');
   }
-  const lastActive = formatRelativeTime(session.lastActiveAt, i18n.language);
   const userName = session.userName ?? session.userId;
 
   const plain = (value: string | undefined): ReactNode => (
     <Typography variant="body2">{value ?? notRecorded}</Typography>
   );
   const dateTime = (value: string | undefined): ReactNode => plain(value && new Date(value).toLocaleString());
+  // The date and time, with a live count of the time since or until it below.
+  const liveDateTime = (value: string | undefined, direction: 'until' | 'since'): ReactNode =>
+    value ? (
+      <>
+        {dateTime(value)}
+        <LiveDuration value={value} direction={direction} />
+      </>
+    ) : (
+      plain(value)
+    );
   // Shown only when they differ from the IP address and sign-in time already shown.
   const showCreationIp = session.creationIp !== undefined && session.creationIp !== session.lastActiveIp;
   const showAuthenticatedAt = session.authenticatedAt !== session.createdAt;
@@ -83,6 +116,8 @@ export default function SessionItem({session, expanded, onToggle, showUser, onRe
         expanded={expanded}
         disableGutters
         square
+        // Unmounted while collapsed, so only an open session's live times keep ticking.
+        slotProps={{transition: {unmountOnExit: true}}}
         sx={{bgcolor: 'transparent', boxShadow: 'none', '&:before': {display: 'none'}}}
       >
         {/* A custom header rather than AccordionSummary, which is itself a button and can't hold another one. */}
@@ -100,11 +135,7 @@ export default function SessionItem({session, expanded, onToggle, showUser, onRe
                 <Typography variant="subtitle2" noWrap>
                   {device}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" component="div" noWrap>
-                  {showUser
-                    ? t('item.userLastActive', '{{user}}, last active {{time}}', {user: userName, time: lastActive})
-                    : t('item.lastActive', 'Last active {{time}}', {time: lastActive})}
-                </Typography>
+                <LastActive session={session} showUser={showUser} />
               </Box>
             </Stack>
           </ButtonBase>
@@ -152,24 +183,28 @@ export default function SessionItem({session, expanded, onToggle, showUser, onRe
               </DetailField>
             )}
             <DetailField label={t('details.applications', 'Active applications')}>
-              {plain(
-                session.participants.length > 0
-                  ? session.participants.map((p) => p.appName ?? p.appId).join(', ')
-                  : t('details.noApplications', 'None'),
+              {session.participants.length > 0 ? (
+                <SessionApplications participants={session.participants} size={28} />
+              ) : (
+                plain(t('details.noApplications', 'None'))
               )}
             </DetailField>
-            <DetailField label={t('details.signedIn', 'Signed in')}>{dateTime(session.createdAt)}</DetailField>
-            <DetailField label={t('details.lastActive', 'Last active')}>{dateTime(session.lastActiveAt)}</DetailField>
+            <DetailField label={t('details.signedIn', 'Signed in')}>
+              {liveDateTime(session.createdAt, 'since')}
+            </DetailField>
+            <DetailField label={t('details.lastActive', 'Latest SSO')}>
+              {liveDateTime(session.lastActiveAt, 'since')}
+            </DetailField>
             {showAuthenticatedAt && (
               <DetailField label={t('details.lastAuthenticated', 'Last entered credentials')}>
                 {dateTime(session.authenticatedAt)}
               </DetailField>
             )}
             <DetailField label={t('details.idleExpiresAt', 'Ends if unused at')}>
-              {dateTime(session.idleExpiresAt)}
+              {liveDateTime(session.idleExpiresAt, 'until')}
             </DetailField>
             <DetailField label={t('details.absoluteExpiresAt', 'Ends at the latest at')}>
-              {dateTime(session.absoluteExpiresAt)}
+              {liveDateTime(session.absoluteExpiresAt, 'until')}
             </DetailField>
           </Box>
         </AccordionDetails>

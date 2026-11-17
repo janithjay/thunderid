@@ -1,7 +1,7 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {fireEvent, render, screen, within} from '@thunderid/test-utils';
+import {act, fireEvent, render, screen, within} from '@thunderid/test-utils';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import type {Session} from '../../models/session';
 import SessionsPanel from '../SessionsPanel';
@@ -79,7 +79,7 @@ describe('SessionsPanel', () => {
 
     expect(getSessionsMock).toHaveBeenCalledWith({userId: 'user-1'}, 10, 0);
     expect(screen.getByRole('button', {name: /Chrome on macOS/})).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText(/^Last active /)).toBeInTheDocument();
+    expect(screen.getByText(/^Latest SSO /)).toBeInTheDocument();
     expect(screen.queryByText(/Alice/)).not.toBeInTheDocument();
   });
 
@@ -89,7 +89,7 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel filter={{appId: 'app-1'}} />);
     fireEvent.click(screen.getByRole('button', {name: /Chrome on macOS/}));
 
-    expect(screen.getByText(/^Alice, last active /)).toBeInTheDocument();
+    expect(screen.getByText(/^Alice, latest SSO /)).toBeInTheDocument();
     expect(screen.getByRole('link', {name: 'Alice'})).toHaveAttribute('href', '/users/user-1');
     expect(screen.queryByRole('button', {name: 'Revoke all'})).not.toBeInTheDocument();
   });
@@ -162,9 +162,64 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('Chrome')).toBeInTheDocument();
     expect(screen.getByText('203.0.113.24')).toBeInTheDocument();
     expect(screen.getByText('198.51.100.7')).toBeInTheDocument();
-    expect(screen.getByText('Console, app-2')).toBeInTheDocument();
+    expect(screen.getAllByRole('img', {name: 'Console'}).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('img', {name: 'app-2'}).length).toBeGreaterThan(0);
     expect(screen.queryByText('sess-1')).not.toBeInTheDocument();
     expect(screen.queryByText(session.userAgent!)).not.toBeInTheDocument();
+  });
+
+  it('shows how long ago the session signed in and had SSO activity, to the minute', () => {
+    const recent = new Date(Date.now() - (2 * 60 + 30) * 1000).toISOString();
+    const justNow = new Date(Date.now() - 20 * 1000).toISOString();
+    withSessions([{...session, createdAt: recent, authenticatedAt: recent, lastActiveAt: justNow}]);
+
+    render(<SessionsPanel filter={{userId: 'user-1'}} />);
+    fireEvent.click(screen.getByRole('button', {name: /Chrome on macOS/}));
+
+    expect(screen.getByText('2m ago')).toBeInTheDocument();
+    expect(screen.getByText('Just now')).toBeInTheDocument();
+  });
+
+  it('keeps the times current as the minutes pass', () => {
+    vi.useFakeTimers({toFake: ['setInterval', 'clearInterval', 'Date']});
+    try {
+      const almostAMinute = new Date(Date.now() - 50 * 1000).toISOString();
+      withSessions([{...session, createdAt: almostAMinute, authenticatedAt: almostAMinute}]);
+
+      render(<SessionsPanel filter={{userId: 'user-1'}} />);
+      fireEvent.click(screen.getByRole('button', {name: /Chrome on macOS/}));
+
+      expect(screen.getByText('Just now')).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(20 * 1000);
+      });
+
+      expect(screen.getByText('1m ago')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks a session end that has passed as ended', () => {
+    withSessions([session]);
+
+    render(<SessionsPanel filter={{userId: 'user-1'}} />);
+    fireEvent.click(screen.getByRole('button', {name: /Chrome on macOS/}));
+
+    expect(screen.getAllByText('Ended')).toHaveLength(2);
+  });
+
+  it('counts down to when the session ends, to the minute', () => {
+    const later = new Date(Date.now() + (90 * 60 + 30) * 1000).toISOString();
+    const soon = new Date(Date.now() + 30 * 1000).toISOString();
+    withSessions([{...session, idleExpiresAt: soon, absoluteExpiresAt: later}]);
+
+    render(<SessionsPanel filter={{userId: 'user-1'}} />);
+    fireEvent.click(screen.getByRole('button', {name: /Chrome on macOS/}));
+
+    expect(screen.getByText('in 1h 30m')).toBeInTheDocument();
+    expect(screen.getByText('Ending now')).toBeInTheDocument();
   });
 
   it('names a mobile SDK session by its device alone', () => {

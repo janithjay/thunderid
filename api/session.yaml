@@ -72,6 +72,7 @@ paths:
                     participants:
                       - appId: "019a1b2c-0000-7000-8000-0000000000aa"
                         appName: "Console"
+                        appLogoUrl: "https://example.com/console.png"
                         firstJoinedAt: "2026-09-30T08:00:00Z"
                         lastActiveAt: "2026-09-30T08:20:00Z"
                 links:
@@ -447,6 +448,9 @@ components:
         appName:
           type: string
           description: The application's name. Left out when the application can't be found.
+        appLogoUrl:
+          type: string
+          description: The application's logo URL. Left out when the application sets none or can't be found.
         firstJoinedAt:
           type: string
           format: date-time

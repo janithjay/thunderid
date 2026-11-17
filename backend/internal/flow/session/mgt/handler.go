@@ -81,10 +81,10 @@ func (h *sessionMgtHandler) HandleSessionListRequest(w http.ResponseWriter, r *h
 	}
 
 	userNames := h.userNames(ctx, page.Sessions)
-	appNames := h.appNames(ctx, page.Sessions)
+	apps := h.appDisplays(ctx, page.Sessions)
 	sessions := make([]sessionResponse, 0, len(page.Sessions))
 	for _, s := range page.Sessions {
-		sessions = append(sessions, toSessionResponse(s, userNames, appNames))
+		sessions = append(sessions, toSessionResponse(s, userNames, apps))
 	}
 	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK,
 		buildListResponse(sessions, page.TotalResults, "/sessions", limit, offset, extraQuery))
@@ -112,12 +112,13 @@ func (h *sessionMgtHandler) HandleSelfSessionListRequest(w http.ResponseWriter, 
 		return
 	}
 
-	// The caller already knows who they are, so only the application names are resolved.
-	appNames := h.appNames(ctx, page.Sessions)
+	// The caller already knows who they are, so only the applications are resolved. The caller signed
+	// in to these applications but may not be allowed to read them, so they are read as the runtime.
+	apps := h.appDisplays(security.WithRuntimeContext(ctx), page.Sessions)
 	tokenFamilyID, _ := security.GetAttribute(ctx, oauth2const.ClaimTokenFamilyID).(string)
 	sessions := make([]sessionResponse, 0, len(page.Sessions))
 	for _, s := range page.Sessions {
-		resp := toSessionResponse(s, nil, appNames)
+		resp := toSessionResponse(s, nil, apps)
 		isCurrent := isCurrentSession(s, tokenFamilyID)
 		resp.IsCurrent = &isCurrent
 		sessions = append(sessions, resp)
@@ -227,22 +228,23 @@ func (h *sessionMgtHandler) userNames(ctx context.Context, sessions []flowsessio
 	return names
 }
 
-// appNames resolves the name of each distinct participating application across the sessions, once
-// per application. An application that can't be found gets no name.
-func (h *sessionMgtHandler) appNames(ctx context.Context, sessions []flowsession.SessionDetail) map[string]string {
-	names := make(map[string]string)
+// appDisplays resolves the name and logo of each distinct participating application across the
+// sessions, once per application. An application that can't be found gets neither.
+func (h *sessionMgtHandler) appDisplays(ctx context.Context,
+	sessions []flowsession.SessionDetail) map[string]appDisplay {
+	apps := make(map[string]appDisplay)
 	for _, s := range sessions {
 		for _, p := range s.Participants {
-			if _, seen := names[p.AppID]; seen {
+			if _, seen := apps[p.AppID]; seen {
 				continue
 			}
-			names[p.AppID] = ""
+			apps[p.AppID] = appDisplay{}
 			if a, svcErr := h.apps.GetApplication(ctx, p.AppID); svcErr == nil && a != nil {
-				names[p.AppID] = a.Name
+				apps[p.AppID] = appDisplay{name: a.Name, logoURL: a.LogoURL}
 			}
 		}
 	}
-	return names
+	return apps
 }
 
 // isCurrentSession reports whether the session issued the caller's access token: one of its

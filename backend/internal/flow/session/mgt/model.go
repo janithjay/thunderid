@@ -10,11 +10,12 @@ import (
 	sysutils "github.com/thunder-id/thunderid/internal/system/utils"
 )
 
-// participantResponse is an application that has joined a session. AppName is omitted when it can't
-// be resolved.
+// participantResponse is an application that has joined a session. AppName and AppLogoURL are
+// omitted when they can't be resolved.
 type participantResponse struct {
 	AppID         string `json:"appId"`
 	AppName       string `json:"appName,omitempty"`
+	AppLogoURL    string `json:"appLogoUrl,omitempty"`
 	FirstJoinedAt string `json:"firstJoinedAt"`
 	LastActiveAt  string `json:"lastActiveAt"`
 }
@@ -55,14 +56,22 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
+// appDisplay is the name and logo of a participating application, shown with the session.
+type appDisplay struct {
+	name    string
+	logoURL string
+}
+
 // toSessionResponse maps a session and its participants to the API view, filling in the resolved
-// names. A name missing from userNames or appNames is left out.
-func toSessionResponse(s flowsession.SessionDetail, userNames, appNames map[string]string) sessionResponse {
+// names and logos. A value missing from userNames or apps is left out.
+func toSessionResponse(s flowsession.SessionDetail, userNames map[string]string,
+	apps map[string]appDisplay) sessionResponse {
 	participants := make([]participantResponse, 0, len(s.Participants))
 	for _, p := range s.Participants {
 		participants = append(participants, participantResponse{
 			AppID:         p.AppID,
-			AppName:       appNames[p.AppID],
+			AppName:       apps[p.AppID].name,
+			AppLogoURL:    apps[p.AppID].logoURL,
 			FirstJoinedAt: formatTime(p.FirstJoinedAt),
 			LastActiveAt:  formatTime(p.LastActiveAt),
 		})

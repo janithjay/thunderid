@@ -9,6 +9,7 @@
 export interface SessionParticipant {
   appId: string;
   appName?: string;
+  appLogoUrl?: string;
   firstJoinedAt: string;
   lastActiveAt: string;
 }

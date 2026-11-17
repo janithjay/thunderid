@@ -40,5 +40,7 @@ export default function useGetSessions(
       return response.data;
     },
     placeholderData: keepPreviousData,
+    // Use moves a session's idle deadline and last activity, so the list is re-read to keep them current.
+    refetchInterval: 30 * 1000,
   });
 }
