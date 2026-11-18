@@ -124,7 +124,7 @@ sections:
       - name: cardLayout
         type: boolean
         tag: optional
-        description: Whether to wrap the form in a bordered card. Defaults to `false`.
+        description: Whether to wrap the form in a bordered card. Defaults to `true`.
       - name: className
         type: string
         tag: optional
@@ -408,7 +408,7 @@ sections:
         description: Whether to render inside a Card wrapper. Defaults to `true`.
       - name: cardVariant
         type: '''elevated'' \'
-        description: Shadow/border style of the card wrapper. Defaults to `'elevated'`.
+        description: Shadow/border style of the card wrapper. Defaults to `'outlined'`.
       - name: compact
         type: boolean
         tag: optional
