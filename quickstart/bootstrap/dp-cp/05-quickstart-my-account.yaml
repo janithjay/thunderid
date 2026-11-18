@@ -1,0 +1,74 @@
+# My Account, where the Data Plane's users manage their own profile, password, passkeys and
+# sessions. The Data Plane serves the app itself from /myaccount; this is the application it signs
+# in with.
+#
+# Layered onto the Data Plane and the Control Plane alike, with the same fixed ID, so that the
+# Control Plane's copy replaces the Data Plane's own on sync rather than adding a duplicate. The
+# app's config.js names the same ID, which is how My Account reads the theme, name and logo set on
+# this application. MY_ACCOUNT_URL is exported by quickstart/bootstrap.sh (and by build.sh's dev
+# run). Named to sort after 01-default-resources.yaml, whose flows it references.
+#
+# It uses the Console App flows: their sign-in is the default one plus the SSO nodes, so it joins
+# the user's SSO session and shows in their session list. An application's flows must come from one
+# family, so its registration and recovery flows are the Console App ones too. Registration is off,
+# since My Account is for existing users; recovery is on, so a user who forgot a password can get
+# back in.
+resource_type: application
+id: 01900000-0000-7000-8000-0000000000f7
+projectId: 01900000-0000-7000-8000-000000000002
+name: My Account
+description: Where users manage their own account
+type: browser
+ouId: 01900000-0000-7000-8000-000000000001
+url: "{{ .MY_ACCOUNT_URL }}"
+logoUrl: "avatar:shape=rounded,variant=anonymous_entity,content=key,colors=0"
+authFlowId: 01900000-0000-7000-8000-000000000068
+registrationFlowId: 01900000-0000-7000-8000-000000000069
+isRegistrationFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+recoveryFlowId: 01900000-0000-7000-8000-000000000070
+isRecoveryFlowEnabled: true
+allowedUserTypes:
+  - person
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: MY_ACCOUNT
+      # With the trailing slash: the server serves My Account from /myaccount/, and the app returns there.
+      redirectUris:
+        - "{{ .MY_ACCOUNT_URL }}/"
+      postLogoutRedirectUris:
+        - "{{ .MY_ACCOUNT_URL }}/"
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      pkceRequired: true
+      tokenEndpointAuthMethod: none
+      publicClient: true
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - given_name
+              - family_name
+              - email
+              - name
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - given_name
+            - family_name
+            - email
+            - name
+      scopeClaims:
+        profile:
+          - name
+          - given_name
+          - family_name
+          - picture
+        email:
+          - email
+          - email_verified

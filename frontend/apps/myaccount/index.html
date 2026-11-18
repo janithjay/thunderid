@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Content-Security-Policy nonce for this response, substituted by the server. Read by the
+         app and passed to the SDK, which applies it to the <style> tags it injects. -->
+    <meta property="csp-nonce" content="__CSP_NONCE__" />
+
+    <!-- Start of loading application configurations -->
+    <script type="text/javascript" src="/config.js"></script>
+    <!-- End of loading application configurations -->
+
+    <!-- No icon until the application's own loads (see useBrandTheme), so the browser never falls back
+         to the server's icon, which is not the brand this app shows. -->
+    <link rel="icon" href="data:," />
+    <title>My Account</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

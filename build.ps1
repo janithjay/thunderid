@@ -168,6 +168,10 @@ $FRONTEND_CONSOLE_CP_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/console
 # The Data Plane's own admin app (Users, Agents, Groups, Roles). Only the quickstart's managed Data
 # Plane ships it, in place of the full console, in the same apps/console slot.
 $FRONTEND_ADMIN_CONSOLE_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/admin-console"
+# My Account, where a Data Plane's users manage their own account. Every Data Plane distribution
+# serves it from /myaccount; a Control Plane has no users of its own, so it ships none.
+$MYACCOUNT_APP_DIST_DIR = "apps/myaccount"
+$FRONTEND_MYACCOUNT_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/myaccount"
 $SAMPLE_BASE_DIR = "samples"
 $VANILLA_SAMPLE_APP_DIR = Join-Path $SAMPLE_BASE_DIR "apps/vanilla-sample"
 $REACT_SDK_SAMPLE_APP_DIR = Join-Path $SAMPLE_BASE_DIR "apps/react-sdk-sample"
@@ -784,6 +788,16 @@ function Prepare-Frontend-For-Packaging {
         Write-Host "Warning: Console app build output not found at $((Join-Path $FRONTEND_CONSOLE_APP_SOURCE_DIR "dist"))"
     }
 
+    # Copy My Account build output
+    if (Test-Path (Join-Path $FRONTEND_MYACCOUNT_APP_SOURCE_DIR "dist")) {
+        Write-Host "Copying My Account app build output..."
+        New-Item -Path (Join-Path $package_folder $MYACCOUNT_APP_DIST_DIR) -ItemType Directory -Force | Out-Null
+        Copy-Item -Path (Join-Path $FRONTEND_MYACCOUNT_APP_SOURCE_DIR "dist\*") -Destination (Join-Path $package_folder $MYACCOUNT_APP_DIST_DIR) -Recurse -Force
+    }
+    else {
+        Write-Host "Warning: My Account app build output not found at $((Join-Path $FRONTEND_MYACCOUNT_APP_SOURCE_DIR "dist"))"
+    }
+
     Write-Host "================================================================"
 }
 
@@ -1005,10 +1019,10 @@ function Add-QuickstartLine {
     Write-QuickstartFile -Path $Path -Content ($out -join "`n")
 }
 
-# Remove-ConsoleApplication drops the default CONSOLE application from a plane's copy of
-# 01-default-resources.yaml. Documents are split on "---"; the one declaring clientId CONSOLE is
-# skipped.
-function Remove-ConsoleApplication {
+# Remove-DefaultApplications drops the default CONSOLE and MY_ACCOUNT applications from a plane's
+# copy of 01-default-resources.yaml. Documents are split on "---"; the ones declaring either client
+# ID are skipped.
+function Remove-DefaultApplications {
     param([string]$PlaneDir)
 
     $path = Join-Path $PlaneDir "bootstrap/01-default-resources.yaml"
@@ -1019,7 +1033,7 @@ function Remove-ConsoleApplication {
         $doc += "$line`n"
     }
     if ($doc -ne "") { $docs.Add($doc) }
-    $kept = $docs | Where-Object { $_ -notmatch "clientId: CONSOLE`n" }
+    $kept = $docs | Where-Object { $_ -notmatch "clientId: CONSOLE`n" -and $_ -notmatch "clientId: MY_ACCOUNT`n" }
     Write-QuickstartFile -Path $path -Content (($kept -join "") )
 }
 
@@ -1148,9 +1162,14 @@ function Package-Quickstart {
     # into the Control Plane's console, so it carries just that console's own client and serves no
     # console UI; the Control Plane's console signs in through auth-dp; and the managed dp's admin
     # console has its own ADMIN_CONSOLE client. It is dropped from every bootstrap.
-    Remove-ConsoleApplication -PlaneDir $auth_dp_dir
-    Remove-ConsoleApplication -PlaneDir $dp_dir
-    Remove-ConsoleApplication -PlaneDir $cp_dir
+    #
+    # The default MY_ACCOUNT application is dropped too: its URLs are the plane's own public URL,
+    # which is the Control Plane's on cp, and the dp copy would be replaced on the first sync anyway.
+    # The pack carries its own copy (dp-cp/05-quickstart-my-account.yaml), templated with the managed
+    # Data Plane's URL on both, and auth-dp has no users to serve My Account to.
+    Remove-DefaultApplications -PlaneDir $auth_dp_dir
+    Remove-DefaultApplications -PlaneDir $dp_dir
+    Remove-DefaultApplications -PlaneDir $cp_dir
 
     Set-QuickstartServiceDeskAdmin -PlaneDir $dp_dir
     Set-QuickstartServiceDeskAdmin -PlaneDir $cp_dir
@@ -1162,6 +1181,8 @@ function Package-Quickstart {
     # quickstart's 05-quickstart-cp-administrator.yaml grants its system root to the admin group.
     Copy-Item -Path (Join-Path $CPSERVER_DIR "idp-bootstrap/*.yaml") -Destination (Join-Path $auth_dp_dir "bootstrap") -Force
     Remove-Item -Path (Join-Path $auth_dp_dir $CONSOLE_APP_DIST_DIR) -Recurse -Force -ErrorAction SilentlyContinue
+    # auth-dp only signs operators into the Control Plane, so it has no users to serve My Account to.
+    Remove-Item -Path (Join-Path $auth_dp_dir $MYACCOUNT_APP_DIST_DIR) -Recurse -Force -ErrorAction SilentlyContinue
 
     # Layer the Data Plane's own admin console application onto the managed dp and the cp. It is
     # the same resource, with the same fixed ID, on both: the cp is where it is administered and
@@ -1236,6 +1257,11 @@ function Package-Quickstart {
     Assert-QuickstartPatch (Join-Path $dp_dir "bootstrap/01-default-resources.yaml") "Service Desk Administrators"
     Assert-QuickstartPatch (Join-Path $cp_dir "bootstrap/01-default-resources.yaml") "Service Desk Administrators"
     Assert-QuickstartPatch (Join-Path $dp_dir "$CONSOLE_APP_DIST_DIR/config.js") "client_id: 'ADMIN_CONSOLE'"
+    Assert-QuickstartPatch (Join-Path $dp_dir "$MYACCOUNT_APP_DIST_DIR/config.js") "client_id: 'MY_ACCOUNT'"
+    Assert-QuickstartPatch (Join-Path $dp_dir "$MYACCOUNT_APP_DIST_DIR/config.js") "01900000-0000-7000-8000-0000000000f7"
+    if (Test-Path (Join-Path $auth_dp_dir $MYACCOUNT_APP_DIST_DIR)) {
+        throw "Quickstart patch did not apply: $(Join-Path $auth_dp_dir $MYACCOUNT_APP_DIST_DIR) should not exist"
+    }
     Assert-QuickstartPatch (Join-Path $dp_dir "deployment.yaml") "  security:"
     Assert-QuickstartPatch (Join-Path $cp_dir "deployment.yaml") "issuer: `"https://localhost:$QUICKSTART_AUTH_DP_PORT`""
     Assert-QuickstartPatch (Join-Path $cp_dir "$CONSOLE_APP_DIST_DIR/config.js") "trusted_issuer"

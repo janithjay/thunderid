@@ -1,0 +1,15 @@
+/* Copyright 2026 The ThunderID Authors */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* The theme's font, through the token App.css defines. */
+body {
+  font-family: var(--font-body);
+}

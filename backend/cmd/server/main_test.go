@@ -506,17 +506,21 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 	logger := log.GetLogger()
 	tmpDir := t.TempDir()
 
-	// Create gate and console directories
+	// Create gate, console and My Account directories
 	gateDir := filepath.Join(tmpDir, "apps", "gate")
 	consoleDir := filepath.Join(tmpDir, "apps", "console")
+	myAccountDir := filepath.Join(tmpDir, "apps", "myaccount")
 	err := os.MkdirAll(gateDir, 0o750)
 	assert.NoError(t, err)
 	err = os.MkdirAll(consoleDir, 0o750)
+	assert.NoError(t, err)
+	err = os.MkdirAll(myAccountDir, 0o750)
 	assert.NoError(t, err)
 
 	// Create index.html files
 	requireWriteFile(t, filepath.Join(gateDir, "index.html"), []byte("gate app"))
 	requireWriteFile(t, filepath.Join(consoleDir, "index.html"), []byte("console app"))
+	requireWriteFile(t, filepath.Join(myAccountDir, "index.html"), []byte("my account app"))
 
 	t.Run("registers handlers for existing directories", func(t *testing.T) {
 		mux := http.NewServeMux()
@@ -535,6 +539,39 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 		mux.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.Contains(t, rr.Body.String(), "console app")
+
+		// Test My Account handler
+		req = httptest.NewRequest(http.MethodGet, "/myaccount/", nil)
+		rr = httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Contains(t, rr.Body.String(), "my account app")
+	})
+
+	t.Run("serves My Account's index.html for its client-side routes", func(t *testing.T) {
+		mux := http.NewServeMux()
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+
+		req := httptest.NewRequest(http.MethodGet, "/myaccount/account", nil)
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Contains(t, rr.Body.String(), "my account app")
+	})
+
+	t.Run("serves My Account js files as application/javascript", func(t *testing.T) {
+		requireWriteFile(t, filepath.Join(myAccountDir, "app.js"), []byte("console.log('hello');"))
+
+		mux := http.NewServeMux()
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+
+		req := httptest.NewRequest(http.MethodGet, "/myaccount/app.js", nil)
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "application/javascript; charset=utf-8", rr.Header().Get("Content-Type"))
 	})
 
 	t.Run("serves js files as application/javascript", func(t *testing.T) {
@@ -703,15 +740,15 @@ func runExitHelper(t *testing.T, envKey, testName string) {
 
 func TestAccessLogExcludePaths(t *testing.T) {
 	// The frontend prefixes are always present, even with no configured extras.
-	assert.Equal(t, []string{"/gate/", "/console/"}, accessLogExcludePaths(nil))
+	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/"}, accessLogExcludePaths(nil))
 
 	// Configured prefixes are appended after the built-in frontend prefixes.
-	assert.Equal(t, []string{"/gate/", "/console/", "/health/", "/metrics/"},
+	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/", "/health/", "/metrics/"},
 		accessLogExcludePaths([]string{"/health/", "/metrics/"}))
 
 	// Empty and root ("/") entries are dropped so they cannot match every request
 	// and silently disable all access logging.
-	assert.Equal(t, []string{"/gate/", "/console/", "/health/"},
+	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/", "/health/"},
 		accessLogExcludePaths([]string{"", "/health/", "/"}))
 }
 

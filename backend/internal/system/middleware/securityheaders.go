@@ -14,15 +14,15 @@ import (
 	"github.com/thunder-id/thunderid/internal/system/csp"
 )
 
-// cspAppPathPrefixes are the only paths CSP is emitted for: the Gate and Console apps, the only
-// responses that render as documents a browser enforces CSP against. Everything else (API, OAuth2) is
-// JSON or a redirect, where a CSP header would be inert.
-var cspAppPathPrefixes = []string{"/gate/", "/console/"}
+// cspAppPathPrefixes are the only paths CSP is emitted for: the Gate, Console and My Account apps, the
+// only responses that render as documents a browser enforces CSP against. Everything else (API, OAuth2)
+// is JSON or a redirect, where a CSP header would be inert.
+var cspAppPathPrefixes = []string{"/gate/", "/console/", "/myaccount/"}
 
 // SecurityHeadersMiddleware applies X-Frame-Options: DENY to every response and the deny-first
-// Content-Security-Policy to Gate and Console responses. The effective CSP policy is resolved per
-// request from the csp server-config section, falling back to the deny-first baseline in report-only
-// mode when unset. X-Frame-Options stays global since, unlike CSP, it has no report-only mode.
+// Content-Security-Policy to Gate, Console and My Account responses. The effective CSP policy is
+// resolved per request from the csp server-config section, falling back to the deny-first baseline in
+// report-only mode when unset. X-Frame-Options stays global since, unlike CSP, it has no report-only mode.
 //
 // A fresh nonce is generated per request and both embedded in the CSP header's style-src-elem
 // directive and stored in the request context, so a downstream handler (serveIndex) can render it

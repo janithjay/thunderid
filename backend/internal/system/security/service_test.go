@@ -805,3 +805,24 @@ func TestOUScopedPublicPathsArePinned(t *testing.T) {
 	assert.False(t, matches("/ou/customer-a/applications"),
 		"and an organization unit prefix does not make a management path public")
 }
+
+// My Account's files load before the user signs in, as the Gate's and Console's do. The account APIs
+// it calls stay protected: only the static app path is public.
+func TestMyAccountAppPathIsPublic(t *testing.T) {
+	compiled, err := compilePathPatterns(publicPaths)
+	assert.NoError(t, err)
+
+	matches := func(path string) bool {
+		for _, p := range compiled {
+			if p.MatchString(path) {
+				return true
+			}
+		}
+		return false
+	}
+
+	assert.True(t, matches("/myaccount/"), "the app root is public")
+	assert.True(t, matches("/myaccount/assets/index.js"), "the app's assets are public")
+	assert.True(t, matches("/myaccount/account"), "the app's routes are public")
+	assert.False(t, matches("/users/me"), "the account API is not public")
+}
