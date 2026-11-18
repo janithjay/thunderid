@@ -48,7 +48,19 @@ trust_gateway_key() {
 export_console_urls() {
     export CP_CONSOLE_URL="${CP_CONSOLE_URL:-https://localhost:$CP_PORT/console}"
     export ADMIN_CONSOLE_URL="${ADMIN_CONSOLE_URL:-https://localhost:$DP_PORT/console}"
-    export MY_ACCOUNT_URL="${MY_ACCOUNT_URL:-https://localhost:$DP_PORT/myaccount}"
+    export MY_ACCOUNT_URL="${MY_ACCOUNT_URL:-https://localhost:$DP_PORT/$(my_account_path)}"
+}
+
+# my_account_path prints the path the Data Plane serves My Account under: my_account.path in
+# dp/deployment.yaml, or "myaccount" when it sets none.
+my_account_path() {
+    local configured
+    configured="$(awk '
+        /^my_account:/ { in_section = 1; next }
+        /^[^ #]/ { in_section = 0 }
+        in_section && /^  path:/ { gsub(/["'"'"' ]/, "", $2); print $2; exit }
+    ' dp/deployment.yaml 2>/dev/null)"
+    echo "${configured:-myaccount}"
 }
 
 # export_dp_ca_certificate exports DP_CA_CERTIFICATE, the managed Data Plane's certificate, which

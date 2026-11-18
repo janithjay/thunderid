@@ -27,6 +27,7 @@ vi.mock('@thunderid/contexts', async (importOriginal) => ({
     isLoading: false,
   }),
   useConfig: () => ({
+    config: {brand: {product_name: 'Acme'}},
     getClientUrl: () => 'https://admin.example/console',
     getTrustedIssuerClientId: () => 'console-client',
     isTrustedIssuerGenericOidc: () => mockIsTrustedIssuerGenericOidc,
@@ -66,7 +67,7 @@ describe('AdminLayout', () => {
     render(<AdminLayout />);
 
     expect(screen.getByTestId('outlet')).toHaveTextContent('Outlet Content');
-    expect(screen.getByText(/The ThunderID Authors/)).toBeInTheDocument();
+    expect(screen.getByText('common:footer.copyright')).toBeInTheDocument();
   });
 
   it('shows the organization unit the admin manages beside the brand', () => {

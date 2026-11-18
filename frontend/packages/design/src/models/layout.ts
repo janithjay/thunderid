@@ -50,6 +50,46 @@ export interface LayoutHead {
 }
 
 /**
+ * The side of the sign-in form the side panel sits on. On small screens it sits above the form for
+ * `left` and below it for `right`.
+ */
+export type SidePanelPosition = 'left' | 'right';
+
+/** The kinds of block a side panel is built from. */
+export type SidePanelBlockType = 'label' | 'heading' | 'text' | 'image' | 'button' | 'appStore' | 'googlePlay';
+
+/**
+ * One block of the side panel. What it uses depends on its type:
+ * - `label`, `heading`: `text`.
+ * - `text`: `text`, and optionally a link at its end, `linkText` opening `url`.
+ * - `image`: `url` (https, or a path on the server) and `text`, which describes it for screen readers.
+ * - `button`: `text`, opening `url`.
+ * - `appStore`, `googlePlay`: `url`, the application's page in that store.
+ */
+export interface SidePanelBlock {
+  /** Unique within the panel. */
+  id: string;
+  type: SidePanelBlockType;
+  text?: string;
+  linkText?: string;
+  url?: string;
+}
+
+/**
+ * A panel beside the sign-in form, built from blocks shown in order. Its colors and font come from the theme.
+ */
+export interface LayoutSidePanel {
+  /** Whether the sign-in page shows the panel. */
+  enabled?: boolean;
+  /** The side of the form the panel sits on. Defaults to `left`. */
+  position?: SidePanelPosition;
+  /** Whether small screens show the panel too. Defaults to false, so phones show only the form. */
+  showOnSmallScreens?: boolean;
+  /** The blocks, in the order the panel shows them. */
+  blocks?: SidePanelBlock[];
+}
+
+/**
  * Layout configuration as a flexible JSON structure.
  * Contains head configuration, screen definitions, and additional layout properties.
  */
@@ -63,6 +103,11 @@ export interface LayoutConfig {
    * Screen configurations for different authentication flows
    */
   screens?: Record<string, unknown>;
+
+  /**
+   * A panel beside the sign-in form
+   */
+  sidePanel?: LayoutSidePanel;
 
   /**
    * Additional layout properties

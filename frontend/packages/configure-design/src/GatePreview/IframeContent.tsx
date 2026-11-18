@@ -8,11 +8,14 @@ import {
   DesignProvider,
   AuthPageLayout,
   AuthCardLayout,
+  AuthSidePanel,
   FontImporter,
+  resolveSidePanel,
   getFontImportURL,
   getCspNonce,
   type Theme,
   type DesignResolveResponse,
+  type LayoutSidePanel,
   type Stylesheet,
 } from '@thunderid/design';
 import {useTemplateLiteralResolver} from '@thunderid/hooks';
@@ -88,6 +91,12 @@ export interface IframeContentProps {
   colorScheme: 'light' | 'dark';
   theme: Theme | undefined;
   stylesheets: Stylesheet[];
+  /** The panel the layout sets beside the sign-in form. */
+  sidePanel?: LayoutSidePanel;
+  /** The side panel block being edited, which is outlined. */
+  selectedSidePanelBlock?: string | null;
+  /** Called with a side panel block's ID when it is clicked. */
+  onSelectSidePanelBlock?: (blockId: string) => void;
   pageBackground: string | undefined;
   mock: EmbeddedFlowComponent[];
   inspectorEnabled: boolean;
@@ -119,6 +128,9 @@ export default function IframeContent({
   colorScheme,
   theme,
   stylesheets,
+  sidePanel = undefined,
+  selectedSidePanelBlock = null,
+  onSelectSidePanelBlock = undefined,
   pageBackground,
   mock,
   inspectorEnabled,
@@ -156,6 +168,12 @@ export default function IframeContent({
   const themeTypography = (hasTheme ? theme : baseTheme)?.typography as {fontFamily?: string} | undefined;
   const fontFamily = themeTypography?.fontFamily;
   const fontImportURL = getFontImportURL(hasTheme ? theme : baseTheme);
+
+  // The side panel sits on the side of the form the layout names, as on the sign-in page.
+  const sidePanelPosition = resolveSidePanel(sidePanel)?.position;
+  const sidePanelElement = sidePanelPosition ? (
+    <AuthSidePanel panel={sidePanel} selectedBlockId={selectedSidePanelBlock} onSelectBlock={onSelectSidePanelBlock} />
+  ) : null;
 
   // Inject custom stylesheets into the iframe document (not the parent).
   const serializedSheets = JSON.stringify(stylesheets);
@@ -215,8 +233,14 @@ export default function IframeContent({
           <IframeBodyBackground iframeDoc={iframeDoc} />
           <IframeDirection iframeDoc={iframeDoc} theme={themeWithBorders} />
           <ElementInspector enabled={inspectorEnabled} onSelectSelector={onSelectSelector}>
-            <AuthPageLayout isLoading={false} variant="SignIn" background={pageBackground}>
+            <AuthPageLayout
+              isLoading={false}
+              variant="SignIn"
+              background={pageBackground}
+              centerColumns={Boolean(sidePanelPosition)}
+            >
               {showThemelessBranding && <ParticleBackground opacity={0.5} />}
+              {sidePanelPosition === 'left' && sidePanelElement}
               <AuthCardLayout
                 variant="SignInBox"
                 showLogo={showThemelessBranding}
@@ -290,6 +314,7 @@ export default function IframeContent({
                   })}
                 </Box>
               </AuthCardLayout>
+              {sidePanelPosition === 'right' && sidePanelElement}
             </AuthPageLayout>
           </ElementInspector>
         </PreviewThemeProvider>

@@ -23,6 +23,10 @@ await i18next.use(initReactI18next).init({
   interpolation: {
     escapeValue: false,
   },
+  // Text added later, from the server or the Console's preview, renders again what it replaces.
+  react: {
+    bindI18nStore: 'added removed',
+  },
 });
 
 export default i18next;

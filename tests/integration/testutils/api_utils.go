@@ -807,9 +807,6 @@ func CreateApplication(app Application) (string, error) {
 	if len(app.PasskeyAllowedOrigins) > 0 {
 		appData["passkeyAllowedOrigins"] = app.PasskeyAllowedOrigins
 	}
-	if app.PasskeyRelyingPartyID != "" {
-		appData["passkeyRelyingPartyId"] = app.PasskeyRelyingPartyID
-	}
 
 	// Add client-level attestation config if provided
 	if app.Attestation != nil {

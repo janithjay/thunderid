@@ -3,7 +3,6 @@
 
 window.__THUNDERID_RUNTIME_CONFIG__ = {
   client: {
-    base: '/myaccount',
     client_id: 'MY_ACCOUNT',
     // The My Account application's ID. The app's theme, name and logo are read from it, so
     // My Account takes the branding assigned to this application.

@@ -584,14 +584,15 @@ sequenceDiagram
 
 **Description**
 
-A signed-in user adds or removes a passkey on their own account. To add one, the SDK sends the
-relying party ID to `register/start` with the user's access token. The server takes the user
-from the token and returns the credential creation options and a session token. The SDK hands
+A signed-in user adds or removes a passkey on their own account. To add one, the SDK calls
+`register/start` with the user's access token. The server takes the user from the token, takes
+the relying party from the passkey step in the sign-in flow of the application the token was
+issued to, and returns the credential creation options and a session token. The SDK hands
 the options to the platform's passkey API, which asks the user to unlock the device and creates
 the credential. The SDK sends the credential, the session token and an optional name to
 `register/finish`, and the server checks the credential against the application's passkey
 origins before saving it. To remove one, the SDK deletes it by ID, then tells the platform's
-passkey provider where the platform supports it.
+passkey provider, with the relying party the list returned, where the platform supports it.
 
 **Assets involved**
 
@@ -609,7 +610,7 @@ sequenceDiagram
   participant P as Platform passkey API
   participant R as /users/me/passkeys
   A->>S: add passkey
-  S->>R: access token, relying party ID
+  S->>R: access token
   R->>S: creation options, session token
   S->>P: creation options
   P->>S: credential
@@ -637,7 +638,7 @@ sequenceDiagram
 | --- | --- | --- | --- | --- |
 | 1 | [Elevation of Privilege] | A caller names another user to add a passkey to, or remove one from, that user's account | [No] | The SDK sends no user identifier; the server takes the user only from the access token (AC11.1) |
 | 2 | [Elevation of Privilege] | Someone holding a stolen access token registers a passkey of their own, and keeps signing in after the token expires | [Yes] | The routes need only a valid access token, with no fresh authentication. The SDK cannot require one. Recorded as a residual |
-| 3 | [Spoofing] | A page on another origin, or a relying party ID the application does not own, gets a passkey saved for the account | [No] | The platform only creates a credential for a relying party ID the origin may claim, and the server checks the credential's origin against the application's passkey origins before saving it |
+| 3 | [Spoofing] | A page on another origin, or a relying party ID the application does not own, gets a passkey saved for the account | [No] | The client cannot choose the relying party: the server takes it from the application's sign-in flow. The platform only creates a credential for a relying party ID the origin may claim, and the server checks the credential's origin against the application's passkey origins before saving it |
 | 4 | [Information Disclosure] | A call that names an explicit URL sends the access token to a host other than the server | [No] | The request goes through the SDK's authenticated transport, so the attachment rules of interaction 04 apply |
 | 5 | [Information Disclosure] | The credential or the session token reaches a log or a crash report | [No] | Both are submitted and discarded as credentials under interaction 03, and are never logged (AC11.7) |
 | 6 | [Denial of Service] | A single click removes the user's only passkey and leaves them without a way to sign in | [No] | A component asks before it removes a passkey, and warns when it is the last (AC11.4) |

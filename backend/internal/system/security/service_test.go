@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -809,7 +810,7 @@ func TestOUScopedPublicPathsArePinned(t *testing.T) {
 // My Account's files load before the user signs in, as the Gate's and Console's do. The account APIs
 // it calls stay protected: only the static app path is public.
 func TestMyAccountAppPathIsPublic(t *testing.T) {
-	compiled, err := compilePathPatterns(publicPaths)
+	compiled, err := compilePathPatterns(append(slices.Clone(publicPaths), myAccountPublicPath))
 	assert.NoError(t, err)
 
 	matches := func(path string) bool {
@@ -825,4 +826,18 @@ func TestMyAccountAppPathIsPublic(t *testing.T) {
 	assert.True(t, matches("/myaccount/assets/index.js"), "the app's assets are public")
 	assert.True(t, matches("/myaccount/account"), "the app's routes are public")
 	assert.False(t, matches("/users/me"), "the account API is not public")
+}
+
+func TestSetMyAccountPath(t *testing.T) {
+	InitDataPlanePermissions("")
+	t.Cleanup(func() { myAccountPublicPath = "/myaccount/**" })
+
+	assert.NoError(t, SetMyAccountPath("mythunderid"))
+	assert.Equal(t, "/mythunderid/**", myAccountPublicPath)
+
+	// A path an API or another app is served under would hide it, so it is refused.
+	for _, taken := range []string{"users", "oauth2", "gate", "console", "import"} {
+		assert.Error(t, SetMyAccountPath(taken), taken)
+	}
+	assert.Equal(t, "/mythunderid/**", myAccountPublicPath)
 }

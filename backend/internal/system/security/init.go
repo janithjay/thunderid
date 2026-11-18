@@ -5,6 +5,7 @@ package security
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/thunder-id/thunderid/internal/system/jose/jwt"
 )
@@ -32,7 +33,7 @@ func Initialize(jwtService jwt.JWTServiceInterface, revocationEnforcer Revocatio
 	authenticators = append(authenticators, newJWTAuthenticator(jwtService, expectedAud))
 
 	securityService, err := newSecurityService(
-		authenticators, revocationEnforcer, publicPaths, apiPermissionEntries)
+		authenticators, revocationEnforcer, append(slices.Clone(publicPaths), myAccountPublicPath), apiPermissionEntries)
 	if err != nil {
 		return nil, err
 	}

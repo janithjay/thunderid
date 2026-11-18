@@ -120,6 +120,9 @@ func (fms *flowMetaService) GetFlowMetadata(
 	fms.populateDesignMetadata(ctx, metaType, id, ouID, response)
 	fms.populateI18nMetadata(ctx, response, lang, ns)
 	response.DefaultReturnURL = flowconfig.ReadFlowSectionConfig(ctx, fms.serverConfig).DefaultReturnURL
+	if response.MyAccount != nil {
+		mergeMyAccountText(response, response.MyAccount.text, ns)
+	}
 
 	fms.logger.Debug(ctx, "Successfully retrieved flow metadata",
 		log.String("type", string(metaType)),
@@ -190,6 +193,9 @@ func (fms *flowMetaService) populateTypeMetadata(
 	response.IsRegistrationFlowEnabled = client.IsRegistrationFlowEnabled
 	response.IsRecoveryFlowEnabled = client.IsRecoveryFlowEnabled
 	response.Application = actorprovider.BuildApplicationMetadata(client.ID, entity, client.Properties)
+	if layout, ok := readMyAccountLayout(client.Properties); ok {
+		response.MyAccount = &MyAccountMetadata{Tabs: layout.Tabs, text: layout.Text}
+	}
 
 	if entity == nil {
 		return "", nil

@@ -14,16 +14,23 @@ import type {TFunction} from 'i18next';
 import {useEffect, useState, type ReactElement, type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import AppLogo from './AppLogo';
+import CustomWidget from './CustomWidget';
+import PreviewRegion from './PreviewRegion';
+import type {AccountSection} from '../layout/accountLayout';
 
 // The SDK exports these functions but not their result types, so derive the types from them.
 type SSOSessionListResponse = Awaited<ReturnType<typeof getMeSessions>>;
-type SSOSession = SSOSessionListResponse['sessions'][number];
+export type SSOSession = SSOSessionListResponse['sessions'][number];
 type User = Record<string, unknown> | null;
 
 export type HomeTarget = 'personal' | 'security' | 'devices';
 
 interface AccountHomeProps {
+  /** Whether My Account shows the tab, so a card can link to it. */
+  canNavigate: (target: HomeTarget) => boolean;
   onNavigate: (target: HomeTarget) => void;
+  /** The Home cards to show, in order. */
+  sections: AccountSection[];
 }
 
 // ─── Profile helpers ──────────────────────────────────────────────
@@ -172,7 +179,13 @@ interface Loadable<T> {
   failed: boolean;
 }
 
-function useAccountActivity(): {passkeys: Loadable<number>; sessions: Loadable<SSOSession[]>} {
+/** The user's passkey count and sessions, which the Home cards summarize. */
+export interface AccountActivity {
+  passkeys: Loadable<number>;
+  sessions: Loadable<SSOSession[]>;
+}
+
+function useAccountActivity(): AccountActivity {
   const {baseUrl, http, instanceId} = useThunderID();
   const [sessions, setSessions] = useState<Loadable<SSOSession[]>>({failed: false});
   const [passkeys, setPasskeys] = useState<Loadable<number>>({failed: false});
@@ -321,13 +334,22 @@ interface CardProps {
   children: ReactNode;
   className?: string;
   footer: string;
-  onFooter: () => void;
+  // Without it, the card has no footer link, as when the tab it links to is hidden.
+  onFooter?: () => void;
   summary: ReactNode;
   title: string;
 }
 
 // One overview card: the SDK's outlined card, with its title, summary and a link to the tab that manages it.
-function HomeCard({art, children, className = '', footer, onFooter, summary, title}: CardProps): ReactElement {
+function HomeCard({
+  art,
+  children,
+  className = '',
+  footer,
+  onFooter = undefined,
+  summary,
+  title,
+}: CardProps): ReactElement {
   return (
     <Card variant="outlined" className={`home-card ${className}`.trim()}>
       <div>
@@ -344,16 +366,18 @@ function HomeCard({art, children, className = '', footer, onFooter, summary, tit
         </div>
         {children}
       </div>
-      <Button
-        variant="text"
-        color="primary"
-        fullWidth
-        endIcon={<ArrowIcon />}
-        className="home-card-footer"
-        onClick={onFooter}
-      >
-        {footer}
-      </Button>
+      {onFooter && (
+        <Button
+          variant="text"
+          color="primary"
+          fullWidth
+          endIcon={<ArrowIcon />}
+          className="home-card-footer"
+          onClick={onFooter}
+        >
+          {footer}
+        </Button>
+      )}
     </Card>
   );
 }
@@ -385,14 +409,26 @@ interface CheckupItem {
 }
 
 // The Home tab: a Google Account-style overview of the signed-in user's profile, security, devices,
-// and apps, each linking to the tab where it is managed.
-export default function AccountHome({onNavigate}: AccountHomeProps): ReactElement {
+// and apps, each linking to the tab where it is managed. It renders the activity it is given, so the
+// Console's preview shows it with sample data exactly as My Account shows the user's own.
+export function AccountHomeView({
+  activity,
+  canNavigate,
+  onNavigate,
+  sections,
+}: AccountHomeProps & {activity: AccountActivity}): ReactElement {
   const {t, i18n} = useTranslation();
   const language: string = i18n.language;
   const context = useThunderID();
   const user: User = context.user as User;
   const {currentOrganizationUnit} = context;
-  const {passkeys, sessions} = useAccountActivity();
+  const {passkeys, sessions} = activity;
+  // The handler that opens a tab, or none when the tab is hidden.
+  const linkTo = (target: HomeTarget): (() => void) | undefined =>
+    canNavigate(target) ? () => onNavigate(target) : undefined;
+  // A checkup action that opens a tab, or none when the tab is hidden.
+  const actionTo = (target: HomeTarget, label: string): CheckupItem['action'] =>
+    canNavigate(target) ? {label, onClick: () => onNavigate(target)} : undefined;
   const profile: Profile = readProfile(user);
 
   const sessionList: SSOSession[] = sessions.data ?? [];
@@ -424,7 +460,7 @@ export default function AccountHome({onNavigate}: AccountHomeProps): ReactElemen
             action: profile.emailVerified
               ? undefined
               : // Email verification lives on the Personal info tab, next to the email itself.
-                {label: t('home.checkup.verify', 'Verify'), onClick: () => onNavigate('personal')},
+                actionTo('personal', t('home.checkup.verify', 'Verify')),
           },
         ]
       : [
@@ -432,7 +468,7 @@ export default function AccountHome({onNavigate}: AccountHomeProps): ReactElemen
             label: t('home.checkup.email.label', 'Recovery email'),
             ok: false,
             detail: t('home.checkup.email.missing', 'Add an email to recover your account'),
-            action: {label: t('home.checkup.add', 'Add'), onClick: () => onNavigate('personal')},
+            action: actionTo('personal', t('home.checkup.add', 'Add')),
           },
         ]),
     ...(sessions.data
@@ -444,10 +480,7 @@ export default function AccountHome({onNavigate}: AccountHomeProps): ReactElemen
               otherSessions === 0
                 ? t('home.checkup.devices.none', 'Only this device is signed in')
                 : t('home.checkup.devices.some', 'Signed in on {{count}} other devices', {count: otherSessions}),
-            action:
-              otherSessions === 0
-                ? undefined
-                : {label: t('home.checkup.review', 'Review'), onClick: () => onNavigate('devices')},
+            action: otherSessions === 0 ? undefined : actionTo('devices', t('home.checkup.review', 'Review')),
           },
         ]
       : []),
@@ -459,6 +492,179 @@ export default function AccountHome({onNavigate}: AccountHomeProps): ReactElemen
   const signedInAt: string | undefined = absoluteTime(language, current?.authenticatedAt);
   const signedInWith: string | undefined =
     currentDevice?.browser || currentDevice?.os ? deviceLabel(t, currentDevice) : undefined;
+
+  // Each Home card, by the section type that shows it.
+  const cards: Record<string, ReactNode> = {
+    'home.personalInfo': (
+      <HomeCard
+        title={t('home.personal.title', 'Personal info')}
+        summary={t('home.personal.summary', 'Your basic info, like your name and how people reach you.')}
+        art={<ProfileArt />}
+        footer={t('home.personal.footer', 'Manage your personal info')}
+        onFooter={linkTo('personal')}
+      >
+        <dl className="home-fields">
+          <div className="home-field">
+            <dt>{t('home.field.name', 'Name')}</dt>
+            <dd>{profile.fullName ?? <span className="home-muted">{t('home.notSet', 'Not set')}</span>}</dd>
+          </div>
+          {profile.username && (
+            <div className="home-field">
+              <dt>{t('home.field.username', 'Username')}</dt>
+              <dd>{profile.username}</dd>
+            </div>
+          )}
+          <div className="home-field">
+            <dt>{t('home.field.email', 'Email')}</dt>
+            <dd>
+              {profile.email ? (
+                <>
+                  <span className="home-truncate">{profile.email}</span>
+                  <Pill ok={profile.emailVerified}>
+                    {profile.emailVerified ? t('home.verified', 'Verified') : t('home.unverified', 'Unverified')}
+                  </Pill>
+                </>
+              ) : (
+                <span className="home-muted">{t('home.notSet', 'Not set')}</span>
+              )}
+            </dd>
+          </div>
+          <div className="home-field">
+            <dt>{t('home.field.phone', 'Phone')}</dt>
+            <dd>
+              {profile.phone ? (
+                <>
+                  <span className="home-truncate">{profile.phone}</span>
+                  {profile.phoneVerified && <Pill ok>{t('home.verified', 'Verified')}</Pill>}
+                </>
+              ) : (
+                <span className="home-muted">{t('home.notSet', 'Not set')}</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </HomeCard>
+    ),
+    'home.securityCheckup': (
+      <HomeCard
+        title={
+          tips === 0
+            ? t('home.security.protected', 'Your account is protected')
+            : t('home.security.tips', 'You have {{count}} security tips', {count: tips})
+        }
+        summary={
+          tips === 0
+            ? t('home.security.protectedSummary', 'The security checkup found no recommended actions.')
+            : t('home.security.tipsSummary', 'Act on these recommendations to keep your account safe.')
+        }
+        art={<ShieldArt ok={tips === 0} />}
+        footer={t('home.security.footer', 'Review security')}
+        onFooter={linkTo('security')}
+      >
+        <ul className="home-checkup">
+          {checkup.map((item: CheckupItem) => (
+            <li key={item.label} className="home-checkup-item">
+              <span className={`home-checkup-icon home-checkup-icon--${item.ok ? 'ok' : 'warn'}`}>
+                {item.ok ? <CheckIcon /> : <AlertIcon />}
+              </span>
+              <span className="home-checkup-text">
+                <span className="home-checkup-label">{item.label}</span>
+                <span className="home-checkup-detail">{item.detail}</span>
+              </span>
+              {item.action && (
+                <Button variant="outline" color="primary" size="small" onClick={item.action.onClick}>
+                  {item.action.label}
+                </Button>
+              )}
+            </li>
+          ))}
+          {(sessions.data === undefined || passkeys.data === undefined) && !sessions.failed && !passkeys.failed && (
+            <Skeleton rows={1} />
+          )}
+        </ul>
+      </HomeCard>
+    ),
+    'home.devices': (
+      <HomeCard
+        title={t('home.devices.title', 'Your devices')}
+        summary={
+          sessions.data
+            ? t('home.devices.summary', "You're signed in on {{count}} devices.", {count: sessionList.length})
+            : t('home.devices.summaryLoading', 'Where you are signed in.')
+        }
+        art={<DevicesArt />}
+        footer={t('home.devices.footer', 'Manage all devices')}
+        onFooter={linkTo('devices')}
+      >
+        {sessions.failed && (
+          <p className="home-muted">{t('home.devices.error', 'Your devices could not be loaded.')}</p>
+        )}
+        {!sessions.failed && !sessions.data && <Skeleton rows={3} />}
+        {sessions.data && (
+          <ul className="home-list">
+            {[...sessionList]
+              .sort((a: SSOSession, b: SSOSession) => Number(b.isCurrent) - Number(a.isCurrent))
+              .slice(0, 3)
+              .map((session: SSOSession) => {
+                const device: Device = describeDevice(session.userAgent);
+
+                return (
+                  <li key={session.id} className="home-list-item">
+                    <span className="home-list-icon">
+                      {device.os && MOBILE_OS.includes(device.os) ? <PhoneIcon /> : <LaptopIcon />}
+                    </span>
+                    <span className="home-list-text">
+                      <span className="home-list-title">{deviceLabel(t, device)}</span>
+                      <span className="home-list-detail">
+                        {session.isCurrent
+                          ? t('home.devices.activeNow', 'Active now')
+                          : t('home.devices.lastActive', 'Last active {{time}}', {
+                              time: relativeTime(t, language, session.lastActiveAt),
+                            })}
+                        {session.lastActiveIp ? ` · ${session.lastActiveIp}` : ''}
+                      </span>
+                    </span>
+                    {session.isCurrent && (
+                      <span className="home-badge">{t('home.devices.thisDevice', 'This device')}</span>
+                    )}
+                  </li>
+                );
+              })}
+          </ul>
+        )}
+      </HomeCard>
+    ),
+    'home.apps': (
+      <HomeCard
+        title={t('home.apps.title', 'Apps you use')}
+        summary={t('home.apps.summary', 'Apps you signed in to with this account.')}
+        art={<AppsArt />}
+        footer={t('home.apps.footer', 'Review sign-ins')}
+        onFooter={linkTo('devices')}
+      >
+        {sessions.failed && <p className="home-muted">{t('home.apps.error', 'Your apps could not be loaded.')}</p>}
+        {!sessions.failed && !sessions.data && <Skeleton rows={3} />}
+        {sessions.data && apps.length === 0 && <p className="home-muted">{t('home.apps.empty', 'No apps yet.')}</p>}
+        {sessions.data && apps.length > 0 && (
+          <ul className="home-list">
+            {apps.slice(0, 4).map((app: ConnectedApp) => (
+              <li key={app.id} className="home-list-item">
+                <AppLogo name={app.name} url={app.logoUrl} />
+                <span className="home-list-text">
+                  <span className="home-list-title">{app.name}</span>
+                  <span className="home-list-detail">
+                    {t('home.apps.lastUsed', 'Last used {{time}}', {
+                      time: relativeTime(t, language, app.lastActiveAt),
+                    })}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </HomeCard>
+    ),
+  };
 
   return (
     <div className="home">
@@ -484,170 +690,11 @@ export default function AccountHome({onNavigate}: AccountHomeProps): ReactElemen
       </header>
 
       <div className="home-grid">
-        <HomeCard
-          title={t('home.personal.title', 'Personal info')}
-          summary={t('home.personal.summary', 'Your basic info, like your name and how people reach you.')}
-          art={<ProfileArt />}
-          footer={t('home.personal.footer', 'Manage your personal info')}
-          onFooter={() => onNavigate('personal')}
-        >
-          <dl className="home-fields">
-            <div className="home-field">
-              <dt>{t('home.field.name', 'Name')}</dt>
-              <dd>{profile.fullName ?? <span className="home-muted">{t('home.notSet', 'Not set')}</span>}</dd>
-            </div>
-            {profile.username && (
-              <div className="home-field">
-                <dt>{t('home.field.username', 'Username')}</dt>
-                <dd>{profile.username}</dd>
-              </div>
-            )}
-            <div className="home-field">
-              <dt>{t('home.field.email', 'Email')}</dt>
-              <dd>
-                {profile.email ? (
-                  <>
-                    <span className="home-truncate">{profile.email}</span>
-                    <Pill ok={profile.emailVerified}>
-                      {profile.emailVerified ? t('home.verified', 'Verified') : t('home.unverified', 'Unverified')}
-                    </Pill>
-                  </>
-                ) : (
-                  <span className="home-muted">{t('home.notSet', 'Not set')}</span>
-                )}
-              </dd>
-            </div>
-            <div className="home-field">
-              <dt>{t('home.field.phone', 'Phone')}</dt>
-              <dd>
-                {profile.phone ? (
-                  <>
-                    <span className="home-truncate">{profile.phone}</span>
-                    {profile.phoneVerified && <Pill ok>{t('home.verified', 'Verified')}</Pill>}
-                  </>
-                ) : (
-                  <span className="home-muted">{t('home.notSet', 'Not set')}</span>
-                )}
-              </dd>
-            </div>
-          </dl>
-        </HomeCard>
-
-        <HomeCard
-          title={
-            tips === 0
-              ? t('home.security.protected', 'Your account is protected')
-              : t('home.security.tips', 'You have {{count}} security tips', {count: tips})
-          }
-          summary={
-            tips === 0
-              ? t('home.security.protectedSummary', 'The security checkup found no recommended actions.')
-              : t('home.security.tipsSummary', 'Act on these recommendations to keep your account safe.')
-          }
-          art={<ShieldArt ok={tips === 0} />}
-          footer={t('home.security.footer', 'Review security')}
-          onFooter={() => onNavigate('security')}
-        >
-          <ul className="home-checkup">
-            {checkup.map((item: CheckupItem) => (
-              <li key={item.label} className="home-checkup-item">
-                <span className={`home-checkup-icon home-checkup-icon--${item.ok ? 'ok' : 'warn'}`}>
-                  {item.ok ? <CheckIcon /> : <AlertIcon />}
-                </span>
-                <span className="home-checkup-text">
-                  <span className="home-checkup-label">{item.label}</span>
-                  <span className="home-checkup-detail">{item.detail}</span>
-                </span>
-                {item.action && (
-                  <Button variant="outline" color="primary" size="small" onClick={item.action.onClick}>
-                    {item.action.label}
-                  </Button>
-                )}
-              </li>
-            ))}
-            {(sessions.data === undefined || passkeys.data === undefined) && !sessions.failed && !passkeys.failed && (
-              <Skeleton rows={1} />
-            )}
-          </ul>
-        </HomeCard>
-
-        <HomeCard
-          title={t('home.devices.title', 'Your devices')}
-          summary={
-            sessions.data
-              ? t('home.devices.summary', "You're signed in on {{count}} devices.", {count: sessionList.length})
-              : t('home.devices.summaryLoading', 'Where you are signed in.')
-          }
-          art={<DevicesArt />}
-          footer={t('home.devices.footer', 'Manage all devices')}
-          onFooter={() => onNavigate('devices')}
-        >
-          {sessions.failed && (
-            <p className="home-muted">{t('home.devices.error', 'Your devices could not be loaded.')}</p>
-          )}
-          {!sessions.failed && !sessions.data && <Skeleton rows={3} />}
-          {sessions.data && (
-            <ul className="home-list">
-              {[...sessionList]
-                .sort((a: SSOSession, b: SSOSession) => Number(b.isCurrent) - Number(a.isCurrent))
-                .slice(0, 3)
-                .map((session: SSOSession) => {
-                  const device: Device = describeDevice(session.userAgent);
-
-                  return (
-                    <li key={session.id} className="home-list-item">
-                      <span className="home-list-icon">
-                        {device.os && MOBILE_OS.includes(device.os) ? <PhoneIcon /> : <LaptopIcon />}
-                      </span>
-                      <span className="home-list-text">
-                        <span className="home-list-title">{deviceLabel(t, device)}</span>
-                        <span className="home-list-detail">
-                          {session.isCurrent
-                            ? t('home.devices.activeNow', 'Active now')
-                            : t('home.devices.lastActive', 'Last active {{time}}', {
-                                time: relativeTime(t, language, session.lastActiveAt),
-                              })}
-                          {session.lastActiveIp ? ` · ${session.lastActiveIp}` : ''}
-                        </span>
-                      </span>
-                      {session.isCurrent && (
-                        <span className="home-badge">{t('home.devices.thisDevice', 'This device')}</span>
-                      )}
-                    </li>
-                  );
-                })}
-            </ul>
-          )}
-        </HomeCard>
-
-        <HomeCard
-          title={t('home.apps.title', 'Apps you use')}
-          summary={t('home.apps.summary', 'Apps you signed in to with this account.')}
-          art={<AppsArt />}
-          footer={t('home.apps.footer', 'Review sign-ins')}
-          onFooter={() => onNavigate('devices')}
-        >
-          {sessions.failed && <p className="home-muted">{t('home.apps.error', 'Your apps could not be loaded.')}</p>}
-          {!sessions.failed && !sessions.data && <Skeleton rows={3} />}
-          {sessions.data && apps.length === 0 && <p className="home-muted">{t('home.apps.empty', 'No apps yet.')}</p>}
-          {sessions.data && apps.length > 0 && (
-            <ul className="home-list">
-              {apps.slice(0, 4).map((app: ConnectedApp) => (
-                <li key={app.id} className="home-list-item">
-                  <AppLogo name={app.name} url={app.logoUrl} />
-                  <span className="home-list-text">
-                    <span className="home-list-title">{app.name}</span>
-                    <span className="home-list-detail">
-                      {t('home.apps.lastUsed', 'Last used {{time}}', {
-                        time: relativeTime(t, language, app.lastActiveAt),
-                      })}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </HomeCard>
+        {sections.map((section: AccountSection) => (
+          <PreviewRegion key={section.id} kind="section" id={section.id} hidden={section.hidden}>
+            {section.type === 'widget' ? <CustomWidget section={section} /> : cards[section.type]}
+          </PreviewRegion>
+        ))}
       </div>
 
       {current && (signedInAt ?? signedInWith) && (
@@ -664,4 +711,11 @@ export default function AccountHome({onNavigate}: AccountHomeProps): ReactElemen
       )}
     </div>
   );
+}
+
+/** The Home tab with the signed-in user's own activity. */
+export default function AccountHome(props: AccountHomeProps): ReactElement {
+  const activity: AccountActivity = useAccountActivity();
+
+  return <AccountHomeView {...props} activity={activity} />;
 }

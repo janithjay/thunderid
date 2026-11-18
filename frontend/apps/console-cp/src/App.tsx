@@ -125,6 +125,7 @@ const ApplicationTemplateSelectPage = lazy(
   () => import('@thunderid/configure-applications/pages/ApplicationTemplateSelectPage'),
 );
 const DesignPage = lazy(() => import('@thunderid/configure-design/pages/DesignPage'));
+const MyAccountPage = lazy(() => import('@thunderid/configure-my-account/pages/MyAccountPage'));
 const LayoutBuilderPage = lazy(() =>
   import('./lib/monaco-setup').then(() => import('@thunderid/configure-design/pages/LayoutBuilderPage')),
 );
@@ -502,6 +503,14 @@ function projectFullScreenRoutes(): JSX.Element {
       </Route>
       <Route path={ROUTE_SEGMENTS.design} element={<DashboardLayout />}>
         <Route index element={<DesignPage />} />
+      </Route>
+      <Route path={ROUTE_SEGMENTS.myAccount} element={<DashboardLayout />}>
+        <Route
+          index
+          element={
+            <MyAccountPage previewUrl={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/myaccount-preview.html`} />
+          }
+        />
       </Route>
       <Route path={`${ROUTE_SEGMENTS.design}/themes/create`} element={<FullScreenLayout />}>
         <Route

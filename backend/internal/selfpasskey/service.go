@@ -7,37 +7,47 @@ package selfpasskey
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strings"
 
 	tidcommon "github.com/thunder-id/thunderid/pkg/thunderidengine/common"
 
 	"github.com/thunder-id/thunderid/internal/authn/passkey"
+	"github.com/thunder-id/thunderid/internal/flow/executormeta"
+	flowmgt "github.com/thunder-id/thunderid/internal/flow/mgt"
 	"github.com/thunder-id/thunderid/internal/inboundclient"
 	"github.com/thunder-id/thunderid/internal/system/config"
 	"github.com/thunder-id/thunderid/internal/system/log"
+	"github.com/thunder-id/thunderid/internal/system/security"
+)
+
+// The properties of a passkey step that name the relying party its passkeys belong to.
+const (
+	propertyRelyingPartyID   = "relyingPartyId"
+	propertyRelyingPartyName = "relyingPartyName"
 )
 
 // selfPasskeyServiceInterface manages the passkeys of the signed-in user.
 type selfPasskeyServiceInterface interface {
-	StartRegistration(ctx context.Context, userID, clientID, relyingPartyID string) (
+	StartRegistration(ctx context.Context, userID, clientID string) (
 		*passkey.PasskeyRegistrationStartData, *tidcommon.ServiceError)
 	FinishRegistration(ctx context.Context, userID, clientID string, req *registrationFinishRequest) (
 		*passkey.PasskeyInfo, *tidcommon.ServiceError)
-	ListPasskeys(ctx context.Context, userID string) ([]passkey.PasskeyInfo, *tidcommon.ServiceError)
+	ListPasskeys(ctx context.Context, userID, clientID string) (*passkeyListResponse, *tidcommon.ServiceError)
 	DeletePasskey(ctx context.Context, userID, passkeyID string) *tidcommon.ServiceError
 }
 
 // appPasskeyConfig holds the passkey settings that apply to the caller's app.
 type appPasskeyConfig struct {
-	origins        []string
-	relyingPartyID string
+	origins          []string
+	relyingPartyID   string
+	relyingPartyName string
 }
 
 // selfPasskeyService is the default implementation of selfPasskeyServiceInterface.
 type selfPasskeyService struct {
 	passkeyService       passkey.PasskeyServiceInterface
 	inboundClientService inboundclient.InboundClientServiceInterface
+	flowMgtService       flowmgt.FlowMgtServiceInterface
 	logger               *log.Logger
 }
 
@@ -45,38 +55,33 @@ type selfPasskeyService struct {
 func newSelfPasskeyService(
 	passkeyService passkey.PasskeyServiceInterface,
 	inboundClientService inboundclient.InboundClientServiceInterface,
+	flowMgtService flowmgt.FlowMgtServiceInterface,
 ) selfPasskeyServiceInterface {
 	return &selfPasskeyService{
 		passkeyService:       passkeyService,
 		inboundClientService: inboundClientService,
+		flowMgtService:       flowMgtService,
 		logger:               log.GetLogger().With(log.String(log.LoggerKeyComponentName, "SelfPasskeyService")),
 	}
 }
 
-// StartRegistration starts adding a passkey for the user, for a relying party the token's app allows.
-// Without a relying party ID, the app's passkey relying party ID is used.
-func (s *selfPasskeyService) StartRegistration(ctx context.Context, userID, clientID, relyingPartyID string) (
+// StartRegistration starts adding a passkey for the user. The passkey belongs to the relying party of the
+// passkey step in the sign-in flow of the token's app, so the passkey signs the user in there.
+func (s *selfPasskeyService) StartRegistration(ctx context.Context, userID, clientID string) (
 	*passkey.PasskeyRegistrationStartData, *tidcommon.ServiceError) {
 	cfg, svcErr := s.passkeyConfig(ctx, clientID)
 	if svcErr != nil {
 		return nil, svcErr
 	}
-
-	relyingPartyID = strings.TrimSpace(relyingPartyID)
-	if relyingPartyID == "" {
-		relyingPartyID = cfg.relyingPartyID
-	}
-	if relyingPartyID == "" {
-		return nil, &passkey.ErrorEmptyRelyingPartyID
-	}
-	if relyingPartyID != cfg.relyingPartyID && !isRelyingPartyAllowed(relyingPartyID, cfg.origins) {
-		return nil, &ErrorRelyingPartyNotAllowed
+	if cfg.relyingPartyID == "" {
+		return nil, &ErrorPasskeySignInNotConfigured
 	}
 
 	return s.passkeyService.StartRegistration(ctx, &passkey.PasskeyRegistrationStartRequest{
-		UserID:         userID,
-		RelyingPartyID: relyingPartyID,
-		AllowedOrigins: cfg.origins,
+		UserID:           userID,
+		RelyingPartyID:   cfg.relyingPartyID,
+		RelyingPartyName: cfg.relyingPartyName,
+		AllowedOrigins:   cfg.origins,
 	})
 }
 
@@ -105,10 +110,19 @@ func (s *selfPasskeyService) FinishRegistration(ctx context.Context, userID, cli
 	return &passkey.PasskeyInfo{ID: req.PublicKeyCredential.ID, Name: name}, nil
 }
 
-// ListPasskeys returns the user's passkeys.
-func (s *selfPasskeyService) ListPasskeys(ctx context.Context, userID string) (
-	[]passkey.PasskeyInfo, *tidcommon.ServiceError) {
-	return s.passkeyService.ListPasskeys(ctx, userID)
+// ListPasskeys returns the user's passkeys, with the relying party they belong to for the token's app, so a
+// client can tell the device's passkey provider about one it removes.
+func (s *selfPasskeyService) ListPasskeys(ctx context.Context, userID, clientID string) (
+	*passkeyListResponse, *tidcommon.ServiceError) {
+	cfg, svcErr := s.passkeyConfig(ctx, clientID)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+	passkeys, svcErr := s.passkeyService.ListPasskeys(ctx, userID)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+	return &passkeyListResponse{Passkeys: passkeys, RelyingPartyID: cfg.relyingPartyID}, nil
 }
 
 // DeletePasskey removes one of the user's passkeys.
@@ -116,8 +130,9 @@ func (s *selfPasskeyService) DeletePasskey(ctx context.Context, userID, passkeyI
 	return s.passkeyService.DeletePasskey(ctx, userID, passkeyID)
 }
 
-// passkeyConfig returns the passkey settings of the app the token was issued to. The origins fall
-// back to the server's passkey origins when the app sets none.
+// passkeyConfig returns the passkey settings of the app the token was issued to: its passkey origins, and
+// the relying party of the passkey step in its sign-in flow. The origins fall back to the server's passkey
+// origins when the app sets none.
 func (s *selfPasskeyService) passkeyConfig(ctx context.Context, clientID string) (
 	*appPasskeyConfig, *tidcommon.ServiceError) {
 	cfg := &appPasskeyConfig{}
@@ -135,7 +150,9 @@ func (s *selfPasskeyService) passkeyConfig(ctx context.Context, clientID string)
 			}
 			if app != nil {
 				cfg.origins = app.PasskeyAllowedOrigins
-				cfg.relyingPartyID = app.PasskeyRelyingPartyID
+				if svcErr := s.readSignInRelyingParty(ctx, app.AuthFlowID, cfg); svcErr != nil {
+					return nil, svcErr
+				}
 			}
 		}
 	}
@@ -145,21 +162,30 @@ func (s *selfPasskeyService) passkeyConfig(ctx context.Context, clientID string)
 	return cfg, nil
 }
 
-// isRelyingPartyAllowed reports whether relyingPartyID is the host, or a parent domain of the host,
-// of one of the web origins. Origins without a host, such as Android app origins, never match.
-func isRelyingPartyAllowed(relyingPartyID string, origins []string) bool {
-	for _, origin := range origins {
-		u, err := url.Parse(origin)
-		if err != nil {
+// readSignInRelyingParty sets the relying party of the first passkey step in the sign-in flow that names
+// one. A flow without such a step leaves it unset.
+func (s *selfPasskeyService) readSignInRelyingParty(ctx context.Context, flowID string,
+	cfg *appPasskeyConfig) *tidcommon.ServiceError {
+	if flowID == "" {
+		return nil
+	}
+	// The app's sign-in flow may belong to another organization unit, such as a default flow, so it is
+	// read without the caller's authorization.
+	flow, svcErr := s.flowMgtService.GetFlow(security.WithRuntimeContext(ctx), flowID)
+	if svcErr != nil {
+		s.logger.Error(ctx, "Failed to load the application's sign-in flow",
+			log.String("flowID", flowID), log.String("error", svcErr.Error.DefaultValue))
+		return &tidcommon.InternalServerError
+	}
+	for _, node := range flow.Nodes {
+		if node.Executor == nil || node.Executor.Name != executormeta.ExecutorNamePasskeyAuth {
 			continue
 		}
-		host := u.Hostname()
-		if host == "" {
-			continue
-		}
-		if host == relyingPartyID || strings.HasSuffix(host, "."+relyingPartyID) {
-			return true
+		if id, _ := node.Properties[propertyRelyingPartyID].(string); id != "" {
+			cfg.relyingPartyID = id
+			cfg.relyingPartyName, _ = node.Properties[propertyRelyingPartyName].(string)
+			return nil
 		}
 	}
-	return false
+	return nil
 }

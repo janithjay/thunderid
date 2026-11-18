@@ -36,7 +36,7 @@ export default function AdminLayout(): JSX.Element {
   const logger = useLogger();
   const {pathname} = useLocation();
   const {clearSession, discovery} = useThunderID();
-  const {isTrustedIssuerGenericOidc, getTrustedIssuerClientId, getClientUrl} = useConfig();
+  const {isTrustedIssuerGenericOidc, getTrustedIssuerClientId, getClientUrl, config} = useConfig();
   const {visible} = useVisibleResources();
   const organization: string | undefined = useOrganizationName();
   const basePath: string = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -160,7 +160,12 @@ export default function AdminLayout(): JSX.Element {
 
       <AppShell.Footer>
         <Footer>
-          <Footer.Copyright>© {new Date().getFullYear()} The ThunderID Authors</Footer.Copyright>
+          <Footer.Copyright>
+            {t('common:footer.copyright', '© {{year}} {{productName}}', {
+              year: new Date().getFullYear(),
+              productName: config.brand.product_name,
+            })}
+          </Footer.Copyright>
         </Footer>
       </AppShell.Footer>
     </AppShell>

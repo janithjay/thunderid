@@ -22,7 +22,8 @@ const (
 	// compares it with the app's allowed origins, so any signing certificate hash works here.
 	selfPasskeyAndroidOrigin   = "android:apk-key-hash:3q2-796tvu_erb7v3q2-796tvu_erb7v3q2-796tvu8"
 	selfPasskeyAndroidClientID = "self_passkey_android_client"
-	selfPasskeyAndroidRedirect = "https://localhost:3000/callback"
+	selfPasskeyWebClientID     = "self_passkey_web_client"
+	selfPasskeyRedirect        = "https://localhost:3000/callback"
 	selfPasskeyOwnerUsername   = "self.passkey.owner"
 	selfPasskeyOwnerPassword   = "OwnerP@ssw0rd!"
 )
@@ -43,13 +44,15 @@ type selfPasskey struct {
 // own passkeys.
 type SelfPasskeyAPITestSuite struct {
 	suite.Suite
-	ouID         string
-	schemaID     string
-	androidAppID string
-	// signInApps signs the suite's users in, since a sign-in is bounded to its application's OU.
+	ouID     string
+	schemaID string
+	flowID   string
+	appIDs   []string
+	// signInApps signs the other user in through an app whose sign-in flow has no passkey step.
 	signInApps testutils.OUSignInApps
-	owner      selfPasskeyUser
-	other      selfPasskeyUser
+	// owner is signed in through a web app whose sign-in flow has a passkey step, so passkeys can be added.
+	owner selfPasskeyUser
+	other selfPasskeyUser
 	// ownerOnAndroid is the owner signed in through an Android app whose only passkey origin is the
 	// app's signing certificate hash.
 	ownerOnAndroid selfPasskeyUser
@@ -82,44 +85,127 @@ func (s *SelfPasskeyAPITestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.schemaID = schemaID
 
-	s.owner = s.createUser(selfPasskeyOwnerUsername, selfPasskeyOwnerPassword)
-	s.other = s.createUser("self.passkey.other", "OtherP@ssw0rd!")
+	flowID, err := testutils.CreateFlow(selfPasskeySignInFlow(ouID))
+	s.Require().NoError(err)
+	s.flowID = flowID
 
-	appID, err := testutils.CreateApplication(testutils.Application{
-		Name:                  "Self Passkey Android App",
-		Description:           "Android app for self-service passkey tests",
-		OUID:                  ouID,
-		Type:                  "mobile",
-		AllowedUserTypes:      []string{"self-passkey-user"},
-		PasskeyAllowedOrigins: []string{selfPasskeyAndroidOrigin},
-		PasskeyRelyingPartyID: selfPasskeyRelyingPartyID,
-		InboundAuthConfig: []map[string]interface{}{{
-			"type": "oauth2",
-			"config": map[string]interface{}{
-				"clientId":                selfPasskeyAndroidClientID,
-				"redirectUris":            []string{selfPasskeyAndroidRedirect},
-				"grantTypes":              []string{"authorization_code"},
-				"responseTypes":           []string{"code"},
-				"tokenEndpointAuthMethod": "none",
-				"publicClient":            true,
-				"pkceRequired":            true,
+	ownerID := s.createUser(selfPasskeyOwnerUsername, selfPasskeyOwnerPassword)
+	s.owner = selfPasskeyUser{id: ownerID, client: s.signInThrough(testutils.Application{
+		Name: "Self Passkey Web App", Type: "browser",
+	}, selfPasskeyWebClientID)}
+
+	otherID := s.createUser("self.passkey.other", "OtherP@ssw0rd!")
+	client, err := s.signInApps.HTTPClientForUser(s.ouID, "self.passkey.other", "OtherP@ssw0rd!")
+	s.Require().NoError(err)
+	s.other = selfPasskeyUser{id: otherID, client: client}
+
+	s.ownerOnAndroid = selfPasskeyUser{id: ownerID, client: s.signInThrough(testutils.Application{
+		Name: "Self Passkey Android App", Type: "mobile", PasskeyAllowedOrigins: []string{selfPasskeyAndroidOrigin},
+	}, selfPasskeyAndroidClientID)}
+}
+
+// selfPasskeySignInFlow signs a user in with a password, or with a passkey for selfPasskeyRelyingPartyID.
+func selfPasskeySignInFlow(ouID string) testutils.Flow {
+	return testutils.Flow{
+		Name:     "Self Passkey Sign-in",
+		FlowType: "AUTHENTICATION",
+		Handle:   "self-passkey-sign-in",
+		OUID:     ouID,
+		Nodes: []map[string]interface{}{
+			{"id": "start", "type": "START", "onSuccess": "prompt_choice"},
+			{
+				"id":   "prompt_choice",
+				"type": "PROMPT",
+				"prompts": []map[string]interface{}{
+					{
+						"inputs": []map[string]interface{}{
+							{"ref": "input_001", "identifier": "username", "type": "TEXT_INPUT", "required": true},
+							{"ref": "input_002", "identifier": "password", "type": "PASSWORD_INPUT", "required": true},
+						},
+						"action": map[string]interface{}{"ref": "action_001", "nextNode": "credentials_auth"},
+					},
+					{"action": map[string]interface{}{"ref": "action_passkey", "nextNode": "passkey_challenge"}},
+				},
 			},
-		}},
-	})
-	s.Require().NoError(err)
-	s.androidAppID = appID
+			{
+				"id":        "credentials_auth",
+				"type":      "TASK_EXECUTION",
+				"executor":  map[string]interface{}{"name": "CredentialsAuthExecutor"},
+				"onSuccess": "auth_assert",
+			},
+			{
+				"id":         "passkey_challenge",
+				"type":       "TASK_EXECUTION",
+				"executor":   map[string]interface{}{"name": "PasskeyAuthExecutor", "mode": "challenge"},
+				"properties": map[string]interface{}{"relyingPartyId": selfPasskeyRelyingPartyID},
+				"onSuccess":  "prompt_assertion",
+			},
+			{
+				"id":   "prompt_assertion",
+				"type": "PROMPT",
+				"prompts": []map[string]interface{}{{
+					"inputs": []map[string]interface{}{
+						{"ref": "input_credential_id", "identifier": "credentialId", "type": "TEXT_INPUT", "required": true},
+						{"ref": "input_client_data", "identifier": "clientDataJSON", "type": "TEXT_INPUT", "required": true},
+						{"ref": "input_auth_data", "identifier": "authenticatorData", "type": "TEXT_INPUT", "required": true},
+						{"ref": "input_signature", "identifier": "signature", "type": "TEXT_INPUT", "required": true},
+					},
+					"action": map[string]interface{}{"ref": "action_assertion", "nextNode": "passkey_verify"},
+				}},
+			},
+			{
+				"id":        "passkey_verify",
+				"type":      "TASK_EXECUTION",
+				"executor":  map[string]interface{}{"name": "PasskeyAuthExecutor", "mode": "verify"},
+				"onSuccess": "auth_assert",
+			},
+			{
+				"id":        "auth_assert",
+				"type":      "TASK_EXECUTION",
+				"executor":  map[string]interface{}{"name": "AuthAssertExecutor"},
+				"onSuccess": "end",
+			},
+			{"id": "end", "type": "END"},
+		},
+	}
+}
 
-	tokenResp, err := testutils.ObtainAccessTokenWithPassword(selfPasskeyAndroidClientID,
-		selfPasskeyAndroidRedirect, "openid", selfPasskeyOwnerUsername, selfPasskeyOwnerPassword, true)
+// signInThrough creates app with the suite's passkey sign-in flow and signs the owner in through it.
+func (s *SelfPasskeyAPITestSuite) signInThrough(app testutils.Application, clientID string) *http.Client {
+	app.Description = "App for self-service passkey tests"
+	app.OUID = s.ouID
+	app.AuthFlowID = s.flowID
+	app.AllowedUserTypes = []string{"self-passkey-user"}
+	app.InboundAuthConfig = []map[string]interface{}{{
+		"type": "oauth2",
+		"config": map[string]interface{}{
+			"clientId":                clientID,
+			"redirectUris":            []string{selfPasskeyRedirect},
+			"grantTypes":              []string{"authorization_code"},
+			"responseTypes":           []string{"code"},
+			"tokenEndpointAuthMethod": "none",
+			"publicClient":            true,
+			"pkceRequired":            true,
+		},
+	}}
+	appID, err := testutils.CreateApplication(app)
 	s.Require().NoError(err)
-	s.ownerOnAndroid = selfPasskeyUser{id: s.owner.id, client: testutils.GetHTTPClientWithToken(tokenResp.AccessToken)}
+	s.appIDs = append(s.appIDs, appID)
+
+	tokenResp, err := testutils.ObtainAccessTokenWithPassword(clientID, selfPasskeyRedirect, "openid",
+		selfPasskeyOwnerUsername, selfPasskeyOwnerPassword, true)
+	s.Require().NoError(err)
+	return testutils.GetHTTPClientWithToken(tokenResp.AccessToken)
 }
 
 func (s *SelfPasskeyAPITestSuite) TearDownSuite() {
-	if s.androidAppID != "" {
-		s.NoError(testutils.DeleteApplication(s.androidAppID))
+	for _, id := range s.appIDs {
+		s.NoError(testutils.DeleteApplication(id))
 	}
 	s.NoError(s.signInApps.DeleteAll())
+	if s.flowID != "" {
+		s.NoError(testutils.DeleteFlow(s.flowID))
+	}
 	for _, id := range []string{s.owner.id, s.other.id} {
 		if id != "" {
 			s.NoError(testutils.DeleteUser(id))
@@ -134,14 +220,12 @@ func (s *SelfPasskeyAPITestSuite) TearDownSuite() {
 }
 
 // createUser creates a user and signs in as them.
-func (s *SelfPasskeyAPITestSuite) createUser(username, password string) selfPasskeyUser {
+func (s *SelfPasskeyAPITestSuite) createUser(username, password string) string {
 	attrs, err := json.Marshal(map[string]interface{}{"username": username, "password": password})
 	s.Require().NoError(err)
 	id, err := testutils.CreateUser(testutils.User{OUID: s.ouID, Type: "self-passkey-user", Attributes: attrs})
 	s.Require().NoError(err)
-	client, err := s.signInApps.HTTPClientForUser(s.ouID, username, password)
-	s.Require().NoError(err)
-	return selfPasskeyUser{id: id, client: client}
+	return id
 }
 
 // do sends a request as the given user and returns the status and body.
@@ -177,8 +261,7 @@ func (s *SelfPasskeyAPITestSuite) requireErrorCode(body []byte, code string) {
 
 // start starts adding a passkey and returns the challenge and session token.
 func (s *SelfPasskeyAPITestSuite) start(user selfPasskeyUser) (string, string) {
-	status, body := s.do(user, http.MethodPost, "/users/me/passkeys/register/start",
-		map[string]string{"relyingPartyId": selfPasskeyRelyingPartyID})
+	status, body := s.do(user, http.MethodPost, "/users/me/passkeys/register/start", nil)
 	s.Require().Equal(http.StatusOK, status, string(body))
 
 	var resp struct {
@@ -227,17 +310,24 @@ func (s *SelfPasskeyAPITestSuite) addPasskey(user selfPasskeyUser, name string) 
 	return saved.ID
 }
 
-// list returns the user's passkeys.
-func (s *SelfPasskeyAPITestSuite) list(user selfPasskeyUser) []selfPasskey {
+// list returns the user's passkeys, and the relying party they belong to for the user's app.
+func (s *SelfPasskeyAPITestSuite) listWithRelyingParty(user selfPasskeyUser) ([]selfPasskey, string) {
 	status, body := s.do(user, http.MethodGet, "/users/me/passkeys", nil)
 	s.Require().Equal(http.StatusOK, status, string(body))
 
 	var resp struct {
-		Passkeys []selfPasskey `json:"passkeys"`
+		Passkeys       []selfPasskey `json:"passkeys"`
+		RelyingPartyID string        `json:"relyingPartyId"`
 	}
 	s.Require().NoError(json.Unmarshal(body, &resp))
 	s.Require().NotNil(resp.Passkeys, string(body))
-	return resp.Passkeys
+	return resp.Passkeys, resp.RelyingPartyID
+}
+
+// list returns the user's passkeys.
+func (s *SelfPasskeyAPITestSuite) list(user selfPasskeyUser) []selfPasskey {
+	passkeys, _ := s.listWithRelyingParty(user)
+	return passkeys
 }
 
 func (s *SelfPasskeyAPITestSuite) TestAddListAndRemovePasskeys() {
@@ -284,12 +374,35 @@ func (s *SelfPasskeyAPITestSuite) TestCannotFinishAnotherUsersRegistration() {
 	s.Empty(s.list(s.other))
 }
 
-func (s *SelfPasskeyAPITestSuite) TestStartRejectsRelyingPartyNotAllowed() {
+// The relying party comes from the app's sign-in flow, whatever the request names.
+func (s *SelfPasskeyAPITestSuite) TestStartUsesSignInFlowRelyingParty() {
 	status, body := s.do(s.owner, http.MethodPost, "/users/me/passkeys/register/start",
 		map[string]string{"relyingPartyId": "evil.example.com"})
+	s.Require().Equal(http.StatusOK, status, string(body))
+
+	var start struct {
+		PublicKeyCredentialCreationOptions struct {
+			RelyingParty struct {
+				ID string `json:"id"`
+			} `json:"rp"`
+		} `json:"publicKeyCredentialCreationOptions"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &start))
+	s.Equal(selfPasskeyRelyingPartyID, start.PublicKeyCredentialCreationOptions.RelyingParty.ID)
+
+	_, relyingPartyID := s.listWithRelyingParty(s.owner)
+	s.Equal(selfPasskeyRelyingPartyID, relyingPartyID)
+}
+
+// A passkey added for an app whose sign-in flow has no passkey step could never sign the user in.
+func (s *SelfPasskeyAPITestSuite) TestStartRefusedWithoutPasskeySignIn() {
+	status, body := s.do(s.other, http.MethodPost, "/users/me/passkeys/register/start", nil)
 
 	s.Equal(http.StatusBadRequest, status)
-	s.requireErrorCode(body, "SPK-1003")
+	s.requireErrorCode(body, "SPK-1005")
+
+	_, relyingPartyID := s.listWithRelyingParty(s.other)
+	s.Empty(relyingPartyID)
 }
 
 func (s *SelfPasskeyAPITestSuite) TestFinishRejectsLongName() {
@@ -313,8 +426,7 @@ func (s *SelfPasskeyAPITestSuite) TestRequiresSignedInUser() {
 }
 
 func (s *SelfPasskeyAPITestSuite) TestAddPasskeyFromAndroidApp() {
-	status, body := s.do(s.ownerOnAndroid, http.MethodPost, "/users/me/passkeys/register/start",
-		map[string]string{})
+	status, body := s.do(s.ownerOnAndroid, http.MethodPost, "/users/me/passkeys/register/start", nil)
 	s.Require().Equal(http.StatusOK, status, string(body))
 	var start struct {
 		PublicKeyCredentialCreationOptions struct {
@@ -327,7 +439,7 @@ func (s *SelfPasskeyAPITestSuite) TestAddPasskeyFromAndroidApp() {
 	}
 	s.Require().NoError(json.Unmarshal(body, &start))
 	s.Equal(selfPasskeyRelyingPartyID, start.PublicKeyCredentialCreationOptions.RelyingParty.ID,
-		"the app's passkey relying party ID applies when the request names none")
+		"the relying party of the app's sign-in flow applies")
 
 	authenticator, err := testutils.NewVirtualAuthenticator(selfPasskeyRelyingPartyID, selfPasskeyAndroidOrigin)
 	s.Require().NoError(err)

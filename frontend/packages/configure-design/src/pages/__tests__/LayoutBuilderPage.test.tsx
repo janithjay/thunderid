@@ -241,12 +241,12 @@ describe('LayoutBuilderPage', () => {
     expect(screen.queryByText('Screens')).not.toBeInTheDocument();
   });
 
-  it('shows the Custom CSS header in the right panel for a centered layout', () => {
+  it('shows the sign-in page header in the right panel for a centered layout', () => {
     mockUseLayoutBuilder.mockReturnValue(makeBuilderState({handle: 'centered'}));
 
     render(<LayoutBuilderPage />);
 
-    expect(screen.getByText('Custom CSS')).toBeInTheDocument();
+    expect(screen.getByText('Sign-in page')).toBeInTheDocument();
   });
 
   it('shows a theme picker in the centered-layout toolbar when themes are available', () => {

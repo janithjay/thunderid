@@ -63,7 +63,9 @@ export default function PasskeysSection({
     onPasskeysChange?.(next);
   };
 
-  const handleChange = (index: number, value: string): void => {
+  const handleChange = (index: number, typed: string): void => {
+    // The browser compares an origin exactly, so a space pasted around it would refuse every passkey there.
+    const value: string = typed.trim();
     const next = [...origins];
     next[index] = value;
     if (value.trim()) {

@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {getAppUrl, getCspNonce, getServerUrl, type RuntimeConfig} from '../runtimeConfig';
+import {getAppBase, getAppUrl, getCspNonce, getServerUrl, type RuntimeConfig} from '../runtimeConfig';
 
-const config: RuntimeConfig = {client: {base: '/myaccount', client_id: 'MY_ACCOUNT'}};
+const config: RuntimeConfig = {client: {client_id: 'MY_ACCOUNT'}};
 
 describe('runtimeConfig', () => {
   afterEach(() => {
     document.head.innerHTML = '';
+    window.history.replaceState(null, '', '/');
   });
 
   it('uses the configured server URL', () => {
@@ -19,8 +20,18 @@ describe('runtimeConfig', () => {
     expect(getServerUrl(config)).toBe(__DEV_SERVER_URL__ || window.location.origin);
   });
 
+  it('takes its base path from the first segment of the address, whatever path it is served under', () => {
+    window.history.replaceState(null, '', '/mythunderid/security');
+    expect(getAppBase()).toBe('/mythunderid');
+
+    window.history.replaceState(null, '', '/myaccount/');
+    expect(getAppBase()).toBe('/myaccount');
+  });
+
   it('builds the app URL from the origin and the base path, ending in the slash the server serves it under', () => {
-    expect(getAppUrl(config)).toBe(`${window.location.origin}/myaccount/`);
+    window.history.replaceState(null, '', '/mythunderid/home');
+
+    expect(getAppUrl()).toBe(`${window.location.origin}/mythunderid/`);
   });
 
   it('reads the nonce the server rendered into the page', () => {

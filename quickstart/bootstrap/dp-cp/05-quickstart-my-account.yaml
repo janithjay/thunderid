@@ -1,6 +1,6 @@
 # My Account, where the Data Plane's users manage their own profile, password, passkeys and
-# sessions. The Data Plane serves the app itself from /myaccount; this is the application it signs
-# in with.
+# sessions. The Data Plane serves the app itself from /<my_account.path> (/myaccount by default);
+# this is the application it signs in with.
 #
 # Layered onto the Data Plane and the Control Plane alike, with the same fixed ID, so that the
 # Control Plane's copy replaces the Data Plane's own on sync rather than adding a duplicate. The
@@ -34,7 +34,8 @@ inboundAuthConfig:
   - type: oauth2
     config:
       clientId: MY_ACCOUNT
-      # With the trailing slash: the server serves My Account from /myaccount/, and the app returns there.
+      # With the trailing slash: the server serves My Account from /<my_account.path>/, and the app
+      # returns there.
       redirectUris:
         - "{{ .MY_ACCOUNT_URL }}/"
       postLogoutRedirectUris:

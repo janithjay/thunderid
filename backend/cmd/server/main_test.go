@@ -524,7 +524,7 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 
 	t.Run("registers handlers for existing directories", func(t *testing.T) {
 		mux := http.NewServeMux()
-		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/myaccount/")
 
 		// Test gate handler
 		req := httptest.NewRequest(http.MethodGet, "/gate/", nil)
@@ -550,7 +550,7 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 
 	t.Run("serves My Account's index.html for its client-side routes", func(t *testing.T) {
 		mux := http.NewServeMux()
-		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/myaccount/")
 
 		req := httptest.NewRequest(http.MethodGet, "/myaccount/account", nil)
 		rr := httptest.NewRecorder()
@@ -560,11 +560,27 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 		assert.Contains(t, rr.Body.String(), "my account app")
 	})
 
+	t.Run("serves My Account and its tab addresses under the configured path only", func(t *testing.T) {
+		mux := http.NewServeMux()
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/mythunderid/")
+
+		for _, path := range []string{"/mythunderid/", "/mythunderid/home", "/mythunderid/security"} {
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+			assert.Equal(t, http.StatusOK, rr.Code, path)
+			assert.Contains(t, rr.Body.String(), "my account app", path)
+		}
+
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/myaccount/", nil))
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
 	t.Run("serves My Account js files as application/javascript", func(t *testing.T) {
 		requireWriteFile(t, filepath.Join(myAccountDir, "app.js"), []byte("console.log('hello');"))
 
 		mux := http.NewServeMux()
-		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/myaccount/")
 
 		req := httptest.NewRequest(http.MethodGet, "/myaccount/app.js", nil)
 		rr := httptest.NewRecorder()
@@ -579,7 +595,7 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 		requireWriteFile(t, filepath.Join(gateDir, "app.js"), jsContent)
 
 		mux := http.NewServeMux()
-		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/myaccount/")
 
 		req := httptest.NewRequest(http.MethodGet, "/gate/app.js", nil)
 		rr := httptest.NewRecorder()
@@ -594,7 +610,7 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 		requireWriteFile(t, filepath.Join(consoleDir, "app.js"), jsContent)
 
 		mux := http.NewServeMux()
-		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/myaccount/")
 
 		req := httptest.NewRequest(http.MethodGet, "/console/app.js", nil)
 		rr := httptest.NewRecorder()
@@ -609,7 +625,7 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 		requireWriteFile(t, filepath.Join(gateDir, "app.mjs"), mjsContent)
 
 		mux := http.NewServeMux()
-		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, tmpDir, "/myaccount/")
 
 		req := httptest.NewRequest(http.MethodGet, "/gate/app.mjs", nil)
 		rr := httptest.NewRecorder()
@@ -623,7 +639,7 @@ func TestRegisterStaticFileHandlers(t *testing.T) {
 		emptyTmpDir := t.TempDir()
 		mux := http.NewServeMux()
 		// Should not panic
-		registerStaticFileHandlers(context.Background(), logger, mux, emptyTmpDir)
+		registerStaticFileHandlers(context.Background(), logger, mux, emptyTmpDir, "/myaccount/")
 	})
 }
 
@@ -740,16 +756,17 @@ func runExitHelper(t *testing.T, envKey, testName string) {
 
 func TestAccessLogExcludePaths(t *testing.T) {
 	// The frontend prefixes are always present, even with no configured extras.
-	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/"}, accessLogExcludePaths(nil))
+	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/"}, accessLogExcludePaths(nil, "/myaccount/"))
+	assert.Equal(t, []string{"/gate/", "/console/", "/mythunderid/"}, accessLogExcludePaths(nil, "/mythunderid/"))
 
 	// Configured prefixes are appended after the built-in frontend prefixes.
 	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/", "/health/", "/metrics/"},
-		accessLogExcludePaths([]string{"/health/", "/metrics/"}))
+		accessLogExcludePaths([]string{"/health/", "/metrics/"}, "/myaccount/"))
 
 	// Empty and root ("/") entries are dropped so they cannot match every request
 	// and silently disable all access logging.
 	assert.Equal(t, []string{"/gate/", "/console/", "/myaccount/", "/health/"},
-		accessLogExcludePaths([]string{"", "/health/", "/"}))
+		accessLogExcludePaths([]string{"", "/health/", "/"}, "/myaccount/"))
 }
 
 // testAuditAPIKey is the management API key the audit test presents.

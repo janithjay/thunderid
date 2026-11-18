@@ -10,6 +10,7 @@ import type {FlowRoutePaths} from '@thunderid/configure-flows';
 import type {DeployRoutePaths, GatewayRoutePaths} from '@thunderid/configure-gateways';
 import type {GroupRoutePaths} from '@thunderid/configure-groups';
 import type {ImportExportRoutePaths} from '@thunderid/configure-import-export';
+import type {MyAccountRoutePaths} from '@thunderid/configure-my-account';
 import type {NotificationTemplateRoutePaths} from '@thunderid/configure-notification-templates';
 import type {OrganizationUnitRoutePaths} from '@thunderid/configure-organization-units';
 import type {ProjectRoutePaths} from '@thunderid/configure-projects';
@@ -63,6 +64,7 @@ export type RouteConfig = OrganizationUnitRoutePaths &
   ImportExportRoutePaths &
   NotificationTemplateRoutePaths &
   DesignRoutePaths &
+  MyAccountRoutePaths &
   FlowRoutePaths &
   GroupRoutePaths &
   RoleRoutePaths &
@@ -101,6 +103,7 @@ export const ROUTE_SEGMENTS = {
   verifiablePresentations: 'verifiable-presentations',
   flows: 'flows',
   design: 'design',
+  myAccount: 'my-account',
   importExport: 'import-export',
   export: 'export',
   importConfiguration: 'import-configuration',
@@ -215,6 +218,9 @@ const RouteConfig: RouteConfig = {
     themeDetail: (themeId) => `/${ROUTE_SEGMENTS.design}/themes/${themeId}`,
     layoutDetail: (layoutId) => `/${ROUTE_SEGMENTS.design}/layouts/${layoutId}`,
   },
+  myAccount: {
+    list: () => `/${ROUTE_SEGMENTS.myAccount}`,
+  },
   importExport: {
     list: () => `/${ROUTE_SEGMENTS.importExport}`,
   },
@@ -264,6 +270,7 @@ const PROJECT_SCOPED_DOMAINS = [
   'verifiablePresentations',
   'flows',
   'design',
+  'myAccount',
   'deploy',
 ] as const satisfies readonly (keyof RouteConfig)[];
 

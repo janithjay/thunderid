@@ -100,6 +100,19 @@ describe('PasskeysSection', () => {
     });
   });
 
+  describe('Editing origins', () => {
+    it('drops spaces around a pasted origin, since the browser compares origins exactly', async () => {
+      const user = userEvent.setup();
+      render(<PasskeysSection allowedOrigins={['https://my.example.com', '']} onPasskeysChange={mockOnChange} />);
+
+      const fields: HTMLElement[] = screen.getAllByRole('textbox');
+      await user.click(fields[1]);
+      await user.paste(' https://auth.example.com ');
+
+      expect(mockOnChange).toHaveBeenLastCalledWith(['https://my.example.com', 'https://auth.example.com']);
+    });
+  });
+
   describe('Removing origins', () => {
     it('removes an origin when its Delete button is clicked', async () => {
       const user = userEvent.setup();

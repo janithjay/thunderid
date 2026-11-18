@@ -386,6 +386,20 @@ func TestCreateStaticFileHandler_CacheHeaders(t *testing.T) {
 		assert.Contains(t, rr.Body.String(), "index")
 	})
 
+	t.Run("sets cache headers when serving another page beside index.html", func(t *testing.T) {
+		requireWriteFile(t, filepath.Join(tmpDir, "preview.html"), []byte("<html>preview</html>"))
+		req := httptest.NewRequest(http.MethodGet, "/app/preview.html", nil)
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, constants.CacheControlNoCacheComposite, rr.Header().Get(constants.CacheControlHeaderName))
+		assert.Equal(t, constants.PragmaNoCache, rr.Header().Get(constants.PragmaHeaderName))
+		assert.Equal(t, constants.ExpiresZero, rr.Header().Get(constants.ExpiresHeaderName))
+		assert.Contains(t, rr.Body.String(), "preview")
+	})
+
 	t.Run("sets cache headers when serving index.html as SPA fallback", func(t *testing.T) {
 		testCases := []struct {
 			path        string
@@ -449,7 +463,7 @@ func TestCreateStaticFileHandler_CacheHeaders(t *testing.T) {
 		}
 	})
 
-	t.Run("does not match files ending with index.html incorrectly", func(t *testing.T) {
+	t.Run("serves a page whose name ends with index.html as itself, not as index.html", func(t *testing.T) {
 		customIndexFile := []byte("custom index content")
 		requireWriteFile(t, filepath.Join(tmpDir, "my-custom-index.html"), customIndexFile)
 
@@ -459,13 +473,9 @@ func TestCreateStaticFileHandler_CacheHeaders(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Empty(t, rr.Header().Get(constants.CacheControlHeaderName),
-			"Cache-Control should not be set for files that contain 'index.html' but are not exactly 'index.html'")
-		assert.Empty(t, rr.Header().Get(constants.PragmaHeaderName),
-			"Pragma should not be set for files that contain 'index.html' but are not exactly 'index.html'")
-		assert.Empty(t, rr.Header().Get(constants.ExpiresHeaderName),
-			"Expires should not be set for files that contain 'index.html' but are not exactly 'index.html'")
 		assert.Equal(t, string(customIndexFile), rr.Body.String())
+		// Like every page beside index.html, it is not cached.
+		assert.Equal(t, constants.CacheControlNoCacheComposite, rr.Header().Get(constants.CacheControlHeaderName))
 	})
 }
 

@@ -14,6 +14,7 @@ import (
 	urlpath "path"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -981,6 +982,40 @@ type Config struct {
 	ResourceSharing            ResourceSharingConfig             `yaml:"resource_sharing"      json:"resource_sharing"`
 	AccountAccess              AccountAccessConfig               `yaml:"account_access"        json:"account_access"`
 	IdentityGovernanceProvider IdentityGovernanceProviderConfig  `yaml:"identity_governance_provider" json:"identity_governance_provider"` //nolint:lll
+	MyAccount                  MyAccountConfig                   `yaml:"my_account"            json:"my_account"`
+}
+
+// MyAccountConfig configures My Account, the app where users manage their own account.
+type MyAccountConfig struct {
+	// Path is the first path segment the Data Plane serves My Account under, such as "myaccount" or a
+	// vendor's name: https://<host>/<path>/home. It is one segment of lowercase letters, digits and hyphens.
+	Path string `yaml:"path" json:"path"`
+}
+
+// DefaultMyAccountPath is the path My Account is served under when my_account.path is not set.
+const DefaultMyAccountPath = "myaccount"
+
+// myAccountPathPattern is the form of MyAccountConfig.Path: one URL path segment.
+var myAccountPathPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+
+// reservedAppPaths are the first path segments the server's other apps are served under.
+var reservedAppPaths = map[string]struct{}{"gate": {}, "console": {}}
+
+// Validate checks that the path is one URL path segment that no other app is served under.
+func (c MyAccountConfig) Validate() error {
+	if !myAccountPathPattern.MatchString(c.Path) {
+		return fmt.Errorf("my_account.path %q must be one path segment of lowercase letters, digits and hyphens",
+			c.Path)
+	}
+	if _, reserved := reservedAppPaths[c.Path]; reserved {
+		return fmt.Errorf("my_account.path %q is already the path of another app", c.Path)
+	}
+	return nil
+}
+
+// MountPath is the path prefix My Account is served under, such as "/myaccount/".
+func (c MyAccountConfig) MountPath() string {
+	return "/" + c.Path + "/"
 }
 
 // ResourceSharingConfig configures how resources may be shared across organization units.
@@ -1141,6 +1176,12 @@ func LoadConfig(configPath string, defaultPath string, serverHome string) (*Conf
 		return nil, err
 	}
 	if err := cfg.AuthZENPDP.Validate(); err != nil {
+		return nil, err
+	}
+	if cfg.MyAccount.Path == "" {
+		cfg.MyAccount.Path = DefaultMyAccountPath
+	}
+	if err := cfg.MyAccount.Validate(); err != nil {
 		return nil, err
 	}
 

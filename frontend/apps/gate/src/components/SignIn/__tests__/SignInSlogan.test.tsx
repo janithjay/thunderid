@@ -93,6 +93,15 @@ describe('SignInSlogan', () => {
     expect(screen.getByText(/Cloud-native, API-first runtime/)).toBeInTheDocument();
   });
 
+  it('shows the configured text beside the logo', () => {
+    window.__THUNDERID_RUNTIME_CONFIG__ = {
+      brand: {logo_text: 'Acme Console'},
+    } as unknown as typeof window.__THUNDERID_RUNTIME_CONFIG__;
+    render(<SignInSlogan />);
+
+    expect(screen.getByText('Acme Console')).toBeInTheDocument();
+  });
+
   it('renders with default logos', () => {
     const {rerender} = render(<SignInSlogan />);
     rerender(<SignInSlogan />);

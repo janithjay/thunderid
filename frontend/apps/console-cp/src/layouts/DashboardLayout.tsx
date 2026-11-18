@@ -49,6 +49,7 @@ import {
   MessageSquare,
   Network,
   Palette,
+  CircleUser,
   Rocket,
   Server,
   Settings,
@@ -327,6 +328,13 @@ function ScopedDashboardLayout({collapseSidebar = false}: DashboardLayoutProps):
       icon: <Palette />,
       path: paths.design.list(),
     };
+    const myAccount: NavRoute = {
+      id: 'my-account',
+      resource: 'app',
+      text: t('navigation:pages.myAccount', 'My Account'),
+      icon: <CircleUser />,
+      path: paths.myAccount.list(),
+    };
     const notifications: NavRoute = {
       id: 'notifications',
       text: t('navigation:pages.notifications', 'Notifications'),
@@ -523,6 +531,7 @@ function ScopedDashboardLayout({collapseSidebar = false}: DashboardLayoutProps):
           category: t('navigation:categories.customize', 'Customize'),
           routes: [
             {...design, badge: badgeOf((undeployed.layout ?? 0) + (undeployed.theme ?? 0))},
+            myAccount,
             {...notifications, badge: badgeOf(undeployed.notification_template)},
           ],
         },
@@ -936,7 +945,12 @@ function ScopedDashboardLayout({collapseSidebar = false}: DashboardLayoutProps):
 
       <AppShell.Footer>
         <Footer>
-          <Footer.Copyright>© {new Date().getFullYear()} The ThunderID Authors</Footer.Copyright>
+          <Footer.Copyright>
+            {t('common:footer.copyright', '© {{year}} {{productName}}', {
+              year: new Date().getFullYear(),
+              productName: config.brand.product_name,
+            })}
+          </Footer.Copyright>
           <Footer.Divider />
           <Footer.Version>{`${VERSION}`}</Footer.Version>
         </Footer>

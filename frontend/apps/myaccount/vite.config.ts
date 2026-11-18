@@ -10,7 +10,8 @@ import {defineConfig} from 'vitest/config';
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5194;
 const HOST = process.env.HOST ?? 'localhost';
-// Served from the Data Plane's `/myaccount` mount (see build.sh's prepare_frontend_for_packaging).
+// The dev server serves the app from /myaccount. A build links its files relative to the page, since the Data
+// Plane serves it under the path my_account.path names, /myaccount by default.
 const BASE_URL = process.env.BASE_URL ?? '/myaccount';
 
 // Dev backend URL, from THUNDERID_DEV_SERVER_URL (default https://localhost:8090). Injected into
@@ -20,7 +21,7 @@ const DEV_SERVER_URL = process.env.THUNDERID_DEV_SERVER_URL?.trim();
 
 // https://vite.dev/config/
 export default defineConfig(({command}) => ({
-  base: BASE_URL,
+  base: command === 'build' ? './' : BASE_URL,
   define: {
     __DEV_SERVER_URL__: JSON.stringify(
       command === 'serve'

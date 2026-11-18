@@ -622,6 +622,19 @@ describe('SignInBox', () => {
     expect(mockOnSubmit).toHaveBeenCalledWith({inputs: {}, action: 'action_signup'});
   });
 
+  it('shows the logo inside the card when no application design applies', () => {
+    const {container} = render(<SignInBox />);
+
+    expect(container.querySelector('img[src*="/assets/images/logo.svg"]')).toBeInTheDocument();
+  });
+
+  it('leaves the logo to the application design when one applies', () => {
+    mockUseDesign.mockReturnValue({isDesignEnabled: true});
+    const {container} = render(<SignInBox />);
+
+    expect(container.querySelector('img[src*="/assets/images/logo.svg"]')).not.toBeInTheDocument();
+  });
+
   it('renders correctly when design is enabled', () => {
     mockUseDesign.mockReturnValue({
       isDesignEnabled: true,

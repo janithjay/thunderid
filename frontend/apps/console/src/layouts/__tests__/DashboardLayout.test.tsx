@@ -279,8 +279,7 @@ describe('DashboardLayout', () => {
   it('renders footer', () => {
     render(<DashboardLayout />);
 
-    const currentYear = new Date().getFullYear();
-    expect(screen.getByText(new RegExp(currentYear.toString()))).toBeInTheDocument();
+    expect(screen.getByText('common:footer.copyright')).toBeInTheDocument();
   });
 
   it('does not start a second sign-in after signing out', async () => {

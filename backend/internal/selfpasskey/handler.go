@@ -43,13 +43,7 @@ func (h *selfPasskeyHandler) HandleRegistrationStartRequest(w http.ResponseWrite
 		return
 	}
 
-	req, err := sysutils.DecodeJSONBody[registrationStartRequest](r)
-	if err != nil {
-		writeError(ctx, w, &ErrorInvalidRequestFormat)
-		return
-	}
-
-	data, svcErr := h.service.StartRegistration(ctx, userID, callerClientID(ctx), req.RelyingPartyID)
+	data, svcErr := h.service.StartRegistration(ctx, userID, callerClientID(ctx))
 	if svcErr != nil {
 		writeError(ctx, w, svcErr)
 		return
@@ -89,12 +83,12 @@ func (h *selfPasskeyHandler) HandleListRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	passkeys, svcErr := h.service.ListPasskeys(ctx, userID)
+	list, svcErr := h.service.ListPasskeys(ctx, userID, callerClientID(ctx))
 	if svcErr != nil {
 		writeError(ctx, w, svcErr)
 		return
 	}
-	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, passkeyListResponse{Passkeys: passkeys})
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, list)
 }
 
 // HandleDeleteRequest handles the request to remove one of the user's passkeys.

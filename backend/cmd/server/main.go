@@ -84,6 +84,10 @@ func main() {
 
 	// Initialize system permission strings before any service or middleware uses them.
 	initSystemPermissions(cfg)
+	// My Account is public under its configured path, which must not hide an API.
+	if err := security.SetMyAccountPath(cfg.MyAccount.Path); err != nil {
+		logger.Fatal(ctx, "Invalid My Account path", log.Error(err))
+	}
 
 	// Create a new HTTP multiplexer.
 	mux := http.NewServeMux()
@@ -125,7 +129,7 @@ func main() {
 	mcp.Initialize(mux, mcpServer, mcpGuard, mcpResourceMeta)
 
 	// Register static file handlers for frontend applications.
-	registerStaticFileHandlers(ctx, logger, mux, serverHome)
+	registerStaticFileHandlers(ctx, logger, mux, serverHome, cfg.MyAccount.MountPath())
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -258,10 +262,11 @@ func loadCertConfig(ctx context.Context, logger *log.Logger, runtimeSvc common.T
 }
 
 // accessLogExcludePaths returns the path prefixes excluded from the access log: the always-excluded
-// Gate, Console and My Account frontend paths plus any configured extras. Empty and root ("/") entries are
-// dropped because they match every request and would silently disable all access logging.
-func accessLogExcludePaths(configured []string) []string {
-	paths := []string{"/gate/", "/console/", "/myaccount/"}
+// Gate, Console and My Account frontend paths, My Account's being myAccountPath, plus any configured extras.
+// Empty and root ("/") entries are dropped because they match every request and would silently disable all
+// access logging.
+func accessLogExcludePaths(configured []string, myAccountPath string) []string {
+	paths := []string{"/gate/", "/console/", myAccountPath}
 	for _, prefix := range configured {
 		if prefix != "" && prefix != "/" {
 			paths = append(paths, prefix)
@@ -281,8 +286,9 @@ func createHTTPServer(ctx context.Context, logger *log.Logger, cfg *config.Confi
 	// Note: Middlewares are wrapped in reverse order - the last added will execute first.
 	// The Gate and Console frontend paths are always excluded from the access log to keep it
 	// focused on API traffic. Additional prefixes can be excluded via log.access.exclude_paths.
-	handler := log.AccessLogHandler(logger, accessLogExcludePaths(cfg.Log.Access.ExcludePaths), securityMiddleware)
-	handler = middleware.SecurityHeadersMiddleware()(handler)
+	handler := log.AccessLogHandler(logger,
+		accessLogExcludePaths(cfg.Log.Access.ExcludePaths, cfg.MyAccount.MountPath()), securityMiddleware)
+	handler = middleware.SecurityHeadersMiddleware(cfg.MyAccount.MountPath())(handler)
 	// Outside the security layer, so that every request carries the deployment id it acts for by the
 	// time any store is reached.
 	handler = middleware.DeploymentIDMiddleware(handler)
@@ -418,8 +424,10 @@ func gracefulShutdown(
 	logger.Info(ctx, "Server shutdown completed")
 }
 
-// registerStaticFileHandlers registers static file handlers for frontend applications.
-func registerStaticFileHandlers(ctx context.Context, logger *log.Logger, mux *http.ServeMux, serverHome string) {
+// registerStaticFileHandlers registers static file handlers for frontend applications. My Account is served
+// under myAccountPath, its configured path prefix such as "/myaccount/".
+func registerStaticFileHandlers(ctx context.Context, logger *log.Logger, mux *http.ServeMux, serverHome string,
+	myAccountPath string) {
 	// Override the OS-level MIME mapping so .js/.mjs files are served as
 	// application/javascript. Most proxies (Envoy, NGINX, Cloudflare) only
 	// compress application/javascript in their default allowlists, not
@@ -447,15 +455,15 @@ func registerStaticFileHandlers(ctx context.Context, logger *log.Logger, mux *ht
 		mux.Handle("/console/", handler)
 	}
 
-	// Serve My Account, where users manage their own account, from /myaccount
+	// Serve My Account, where users manage their own account, from its configured path
 	myAccountDir := path.Join(serverHome, "apps", "myaccount")
-	if handler, err := createStaticFileHandler("/myaccount/", myAccountDir, logger); err != nil {
+	if handler, err := createStaticFileHandler(myAccountPath, myAccountDir, logger); err != nil {
 		logger.Warn(ctx, "My Account application not registered",
 			log.String("directory", myAccountDir), log.Error(err))
 	} else {
 		logger.Debug(ctx, "Registering static file handler for My Account application",
-			log.String("path", "/myaccount/"), log.String("directory", myAccountDir))
-		mux.Handle("/myaccount/", handler)
+			log.String("path", myAccountPath), log.String("directory", myAccountDir))
+		mux.Handle(myAccountPath, handler)
 	}
 }
 

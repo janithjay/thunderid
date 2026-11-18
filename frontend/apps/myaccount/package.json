@@ -15,6 +15,9 @@
   "author": "The ThunderID Authors",
   "license": "Apache-2.0",
   "type": "module",
+  "exports": {
+    "./preview": "./src/preview/main.tsx"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/thunder-id/thunderid",
@@ -36,8 +39,8 @@
   },
   "dependencies": {
     "@thunderid/i18n": "workspace:^",
-    "@thunderid/react": "catalog:",
-    "@thunderid/react-router": "catalog:",
+    "@thunderid/react": "link:../../../../javascript-sdks/packages/react",
+    "@thunderid/react-router": "link:../../../../javascript-sdks/packages/react-router",
     "i18next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

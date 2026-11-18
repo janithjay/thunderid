@@ -597,6 +597,11 @@ configuration:
   directApi:
     enabled: true
 
+  # My Account, where users manage their own account. path is the one path segment it is served
+  # under: https://<host>/<path>/home, /personal, /security.
+  myAccount:
+    path: "myaccount"
+
   # Passkey configuration
   passkey:
     allowedOrigins:

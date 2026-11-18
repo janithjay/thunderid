@@ -12,6 +12,11 @@ export interface AuthPageLayoutProps extends PropsWithChildren {
   background?: string;
   /** Whether to show the loading state (e.g. skeletons instead of content). */
   isLoading: boolean;
+  /**
+   * Centers the page's columns vertically against each other on wide screens, such as a side panel and the
+   * sign-in form, instead of lining up their tops.
+   */
+  centerColumns?: boolean;
 }
 
 /**
@@ -24,6 +29,7 @@ export default function AuthPageLayout({
   isLoading,
   variant = undefined,
   background = undefined,
+  centerColumns = false,
   children,
 }: AuthPageLayoutProps): JSX.Element {
   return (
@@ -53,6 +59,7 @@ export default function AuthPageLayout({
           direction={{xs: 'column', md: 'row'}}
           sx={{
             justifyContent: 'center',
+            ...(centerColumns ? {alignItems: {md: 'center'}} : {}),
             gap: {xs: 4, sm: 16},
             p: {xs: 2, sm: 4},
             m: 'auto',

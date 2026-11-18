@@ -3514,7 +3514,6 @@ func TestImportResources_ApplicationPasskeySettingsPassedToService(t *testing.T)
 			"name: Account",
 			"passkeyAllowedOrigins:",
 			"  - http://localhost:5173",
-			"passkeyRelyingPartyId: localhost",
 			"",
 		}, "\n"),
 	})
@@ -3524,7 +3523,6 @@ func TestImportResources_ApplicationPasskeySettingsPassedToService(t *testing.T)
 	assert.Equal(t, statusSuccess, resp.Results[0].Status)
 	require.Len(t, appSvc.created, 1)
 	assert.Equal(t, []string{"http://localhost:5173"}, appSvc.created[0].PasskeyAllowedOrigins)
-	assert.Equal(t, "localhost", appSvc.created[0].PasskeyRelyingPartyID)
 }
 
 func TestImportResources_ApplicationAttestationPassedToService(t *testing.T) {

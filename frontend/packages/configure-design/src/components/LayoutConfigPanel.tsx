@@ -1,14 +1,15 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {useGetLayout, useUpdateLayout, type Stylesheet} from '@thunderid/design';
+import {useGetLayout, useUpdateLayout, type LayoutSidePanel, type Stylesheet} from '@thunderid/design';
 import {getErrorMessage} from '@thunderid/utils';
-import {Alert, Box, CircularProgress, Typography} from '@wso2/oxygen-ui';
+import {Alert, Box, CircularProgress, Divider, Typography} from '@wso2/oxygen-ui';
 import {useCallback, useEffect, useMemo, useRef, useState, type JSX, type RefObject} from 'react';
 import {useTranslation} from 'react-i18next';
 import CustomCSSEditor from './layouts/CustomCSSEditor';
 import type {CustomCSSEditorHandle} from './layouts/CustomCSSEditor';
 import ScreenEditor from './layouts/ScreenEditor';
+import SidePanelEditor from './layouts/SidePanelEditor';
 
 interface LayoutConfigPanelProps {
   layoutId: string | null;
@@ -21,6 +22,22 @@ interface LayoutConfigPanelProps {
   stylesheets?: Stylesheet[];
   onStylesheetsChange?: (stylesheets: Stylesheet[]) => void;
   cssEditorRef?: RefObject<CustomCSSEditorHandle | null>;
+  /** The panel beside the sign-in form, as the draft holds it. */
+  sidePanel?: LayoutSidePanel;
+  /** Edits the side panel. Without it, the panel is neither shown for editing nor saved. */
+  onSidePanelChange?: (panel: LayoutSidePanel) => void;
+  /** The side panel block being edited, shared with the preview. */
+  selectedSidePanelBlock?: string | null;
+  onSelectSidePanelBlock?: (blockId: string | null) => void;
+}
+
+/** A heading for one of the layout-wide sections of the panel. */
+function SectionTitle({children}: {children: string}): JSX.Element {
+  return (
+    <Typography variant="subtitle2" component="h3" sx={{px: 1.5, pt: 1.5}}>
+      {children}
+    </Typography>
+  );
 }
 
 function setIn(obj: Record<string, unknown>, path: string[], value: unknown): Record<string, unknown> {
@@ -43,6 +60,10 @@ export default function LayoutConfigPanel({
   stylesheets = [],
   onStylesheetsChange = undefined,
   cssEditorRef = undefined,
+  sidePanel = undefined,
+  onSidePanelChange = undefined,
+  selectedSidePanelBlock = null,
+  onSelectSidePanelBlock = undefined,
 }: LayoutConfigPanelProps): JSX.Element {
   const {t} = useTranslation('design');
   const {data: layout, isLoading} = useGetLayout(layoutId ?? '');
@@ -106,6 +127,15 @@ export default function LayoutConfigPanel({
       }
     }
 
+    // Only touch sidePanel when side panel editing is active
+    if (onSidePanelChange) {
+      if (sidePanel) {
+        updatedLayout = {...updatedLayout, sidePanel};
+      } else {
+        delete updatedLayout.sidePanel;
+      }
+    }
+
     mutateAsync({
       layoutId: layout.id,
       data: {handle: layout.handle, displayName: layout.displayName, layout: updatedLayout},
@@ -116,7 +146,19 @@ export default function LayoutConfigPanel({
           getErrorMessage(err, t, 'layouts.config.errors.save.message', 'Failed to save layout. Please try again.'),
         );
       });
-  }, [screenDraft, layout, selectedScreen, screens, stylesheets, onStylesheetsChange, mutateAsync, onDirtyChange, t]);
+  }, [
+    screenDraft,
+    layout,
+    selectedScreen,
+    screens,
+    stylesheets,
+    onStylesheetsChange,
+    sidePanel,
+    onSidePanelChange,
+    mutateAsync,
+    onDirtyChange,
+    t,
+  ]);
 
   // Keep the parent's save ref pointing to the latest handleSave
   const handleSaveLatest = useRef(handleSave);
@@ -166,6 +208,21 @@ export default function LayoutConfigPanel({
 
       {/* Screen config editor */}
       {screenDraft && selectedScreen && <ScreenEditor screenDraft={screenDraft} onUpdate={updateField} />}
+
+      {/* Side panel beside the sign-in form — layout-level, not per-screen */}
+      {onSidePanelChange && (
+        <>
+          <SectionTitle>{t('layouts.config.side_panel.title', 'Side panel')}</SectionTitle>
+          <SidePanelEditor
+            panel={sidePanel}
+            onChange={onSidePanelChange}
+            selectedBlockId={selectedSidePanelBlock}
+            onSelectBlock={onSelectSidePanelBlock}
+          />
+          <Divider />
+          {onStylesheetsChange && <SectionTitle>{t('layouts.config.custom_css.title', 'Custom CSS')}</SectionTitle>}
+        </>
+      )}
 
       {/* Custom CSS — layout-level, not per-screen */}
       {onStylesheetsChange && (

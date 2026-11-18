@@ -15,7 +15,7 @@ if (!config) {
   throw new Error('config.js did not load, so the client settings are missing.');
 }
 
-const appUrl: string = getAppUrl(config);
+const appUrl: string = getAppUrl();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

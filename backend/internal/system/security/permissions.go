@@ -5,12 +5,50 @@ package security
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/thunder-id/thunderid/internal/system/constants"
 )
+
+// myAccountPublicPath is the public path of the My Account app, which the server serves under the
+// configured my_account.path. Set by SetMyAccountPath at startup.
+var myAccountPublicPath = "/myaccount/**"
+
+// SetMyAccountPath makes the My Account app public under path, the first path segment the server serves it
+// under. It fails when that segment is already the first segment of an API or another public path, since My
+// Account would then hide it. It must be called once at startup, after the permissions are initialized and
+// before Initialize.
+func SetMyAccountPath(path string) error {
+	for _, pattern := range takenPathPatterns() {
+		if firstPathSegment(pattern) == path {
+			return fmt.Errorf("my_account.path %q is already used by the path %q", path, pattern)
+		}
+	}
+	myAccountPublicPath = "/" + path + "/**"
+	return nil
+}
+
+// takenPathPatterns are the path patterns of the server's APIs and public paths, without their methods.
+func takenPathPatterns() []string {
+	patterns := slices.Concat(publicPaths, managementAPIKeyPaths)
+	for _, entry := range apiPermissionEntries {
+		_, pathPattern, found := strings.Cut(entry.pattern, " ")
+		if !found {
+			pathPattern = entry.pattern
+		}
+		patterns = append(patterns, pathPattern)
+	}
+	return patterns
+}
+
+// firstPathSegment returns the first segment of a path pattern, such as "users" for "/users/**".
+func firstPathSegment(pattern string) string {
+	segment, _, _ := strings.Cut(strings.TrimPrefix(pattern, "/"), "/")
+	return segment
+}
 
 // publicPaths defines the list of public paths using glob patterns.
 // - "*": Matches a single path segment (e.g., /a/*/b).
@@ -45,7 +83,6 @@ var publicPaths = []string{
 	"/.well-known/oauth-protected-resource",
 	"/gate/**",
 	"/console/**",
-	"/myaccount/**",
 	"/error/**",
 	"/design/resolve/**",
 	"/i18n/languages",

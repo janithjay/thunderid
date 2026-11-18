@@ -8,7 +8,6 @@
 export interface RuntimeConfig {
   client: {
     application_id?: string;
-    base: string;
     client_id: string;
     scopes?: string[];
   };
@@ -31,11 +30,18 @@ export const getServerUrl = (config: RuntimeConfig): string =>
   [config.server?.public_url, __DEV_SERVER_URL__].find(Boolean) ?? window.location.origin;
 
 /**
+ * The path the app is served under, such as `/myaccount` or `/mythunderid`: the first segment of the page's
+ * path. The Data Plane serves My Account under the one segment its my_account.path setting names, so one
+ * build works under any of them.
+ */
+export const getAppBase = (): string => `/${window.location.pathname.split('/')[1] ?? ''}`;
+
+/**
  * Where the app lives, which is also where sign-in and sign-out return to. It ends in a slash because
  * the server serves the app from `<base>/` and redirects `<base>` there, and the SDK recognizes the
  * sign-in callback only on the exact URL it returns to.
  */
-export const getAppUrl = (config: RuntimeConfig): string => `${window.location.origin}${config.client.base}/`;
+export const getAppUrl = (): string => `${window.location.origin}${getAppBase()}/`;
 
 /** The CSP nonce the server rendered into the page, for the SDK's runtime `<style>` tags. */
 export const getCspNonce = (): string | undefined => {

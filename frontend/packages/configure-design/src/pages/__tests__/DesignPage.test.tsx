@@ -6,13 +6,15 @@ import {fireEvent, render, screen, waitFor} from '@thunderid/test-utils';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import DesignPage from '../DesignPage';
 
-const {mockNavigate, mockShowToast, mockRefetchThemes, mockRefetchLayouts, mockUseGetLayouts} = vi.hoisted(() => ({
-  mockNavigate: vi.fn(),
-  mockShowToast: vi.fn(),
-  mockRefetchThemes: vi.fn(),
-  mockRefetchLayouts: vi.fn(),
-  mockUseGetLayouts: vi.fn(),
-}));
+const {mockNavigate, mockShowToast, mockRefetchThemes, mockRefetchLayouts, mockUseGetLayouts, mockCreateLayout} =
+  vi.hoisted(() => ({
+    mockCreateLayout: vi.fn(),
+    mockNavigate: vi.fn(),
+    mockShowToast: vi.fn(),
+    mockRefetchThemes: vi.fn(),
+    mockRefetchLayouts: vi.fn(),
+    mockUseGetLayouts: vi.fn(),
+  }));
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
@@ -62,6 +64,12 @@ vi.mock('@thunderid/design', () => ({
     };
   },
   useDeleteTheme: () => ({mutate: vi.fn(), reset: vi.fn(), isPending: false, isError: false}),
+  useDeleteLayout: () => ({mutate: vi.fn(), reset: vi.fn(), isPending: false, isError: false}),
+  useCreateLayout: () => ({mutate: mockCreateLayout, isPending: false}),
+  useGetLayout: (id: string) => ({
+    data: id ? {id, handle: 'centered', displayName: 'Centered', layout: {screens: {}}} : undefined,
+    isError: false,
+  }),
   useGetThemeUsages: () => ({data: undefined, isLoading: false}),
 }));
 
@@ -169,10 +177,45 @@ describe('DesignPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/design/layouts/layout-1');
   });
 
-  it('does not offer a create action for layouts, which are bootstrapped rather than user-created', () => {
+  it('creates a layout as a copy of one the project has, and opens it', async () => {
+    mockCreateLayout.mockImplementation((_request: unknown, {onSuccess}: {onSuccess: (layout: unknown) => void}) =>
+      onSuccess({id: 'layout-9'}),
+    );
     render(<DesignPage />);
 
-    expect(screen.queryByRole('button', {name: 'Add Layout'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Add layout'}));
+    fireEvent.change(screen.getByRole('textbox', {name: /Name/}), {target: {value: 'Centered'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Create layout'}));
+
+    expect(mockCreateLayout).toHaveBeenCalledWith(
+      {handle: 'centered-2', displayName: 'Centered', layout: {screens: {}}},
+      expect.any(Object),
+    );
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/design/layouts/layout-9'));
+  });
+
+  it('offers to delete a layout the project made, and keeps the built-in ones', () => {
+    layoutsList = [
+      {id: 'layout-1', handle: 'centered', displayName: 'Centered', layout: {}},
+      {id: 'layout-2', handle: 'sign-in-with-picture', displayName: 'Sign-in with picture', layout: {}},
+    ];
+    render(<DesignPage />);
+
+    const deletes: HTMLElement[] = screen.getAllByRole('button', {name: 'Delete'});
+    expect(deletes).toHaveLength(1);
+    fireEvent.click(deletes[0]);
+
+    expect(screen.getByText('Are you sure you want to delete "Sign-in with picture"?')).toBeInTheDocument();
+  });
+
+  it('hides Add layout when the admin may only view designs', () => {
+    render(
+      <CapabilitiesProvider capabilities={viewOnly}>
+        <DesignPage />
+      </CapabilitiesProvider>,
+    );
+
+    expect(screen.queryByRole('button', {name: 'Add layout'})).not.toBeInTheDocument();
   });
 
   it('navigates to the themes create page when Add Theme is clicked', async () => {

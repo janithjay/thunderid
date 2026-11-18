@@ -26,6 +26,10 @@ vi.mock('../layouts/ScreenEditor', () => ({
   ),
 }));
 
+vi.mock('../layouts/SidePanelEditor', () => ({
+  default: () => <div>Side Panel Editor</div>,
+}));
+
 vi.mock('../layouts/CustomCSSEditor', () => ({
   default: ({onChange}: {onChange: (next: unknown[]) => void}) => (
     <button type="button" onClick={() => onChange([{id: 'custom-1', content: 'body {}'}])}>
@@ -124,5 +128,44 @@ describe('LayoutConfigPanel', () => {
 
     expect(screen.queryByText('Failed to save layout. Please try again.')).not.toBeInTheDocument();
     expect(onStylesheetsChange).toHaveBeenCalledWith([{id: 'custom-1', content: 'body {}'}]);
+  });
+
+  it('saves the side panel with the layout, and leaves it out once removed', () => {
+    mockMutateAsync.mockResolvedValue(undefined);
+    const saveHandlerRef: RefObject<() => void> = {current: () => null};
+    const sidePanel = {enabled: true, blocks: [{id: 'heading-1', type: 'heading' as const, text: 'A higher standard'}]};
+
+    const {rerender} = render(
+      <LayoutConfigPanel
+        layoutId="layout-1"
+        selectedScreen={null}
+        onScreenChange={vi.fn()}
+        screenDraft={null}
+        onScreenDraftChange={vi.fn()}
+        saveHandlerRef={saveHandlerRef}
+        sidePanel={sidePanel}
+        onSidePanelChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Side Panel Editor')).toBeInTheDocument();
+    saveHandlerRef.current?.();
+    const first = mockMutateAsync.mock.lastCall?.[0] as {data: {layout: Record<string, unknown>}};
+    expect(first.data.layout['sidePanel']).toEqual(sidePanel);
+
+    rerender(
+      <LayoutConfigPanel
+        layoutId="layout-1"
+        selectedScreen={null}
+        onScreenChange={vi.fn()}
+        screenDraft={null}
+        onScreenDraftChange={vi.fn()}
+        saveHandlerRef={saveHandlerRef}
+        onSidePanelChange={vi.fn()}
+      />,
+    );
+    saveHandlerRef.current?.();
+    const saved = mockMutateAsync.mock.lastCall?.[0] as {data: {layout: Record<string, unknown>}};
+    expect(saved.data.layout).not.toHaveProperty('sidePanel');
   });
 });

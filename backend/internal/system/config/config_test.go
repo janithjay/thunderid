@@ -2162,3 +2162,13 @@ notification:
 		assert.Error(suite.T(), err, unknown)
 	}
 }
+
+func TestMyAccountPathValidation(t *testing.T) {
+	for _, path := range []string{"myaccount", "mythunderid", "acme-2"} {
+		assert.NoError(t, (MyAccountConfig{Path: path}).Validate(), path)
+	}
+	for _, path := range []string{"", "mythunderid", "my account", "a/b", "-x", "gate", "console"} {
+		assert.Error(t, (MyAccountConfig{Path: path}).Validate(), path)
+	}
+	assert.Equal(t, "/mythunderid/", (MyAccountConfig{Path: "mythunderid"}).MountPath())
+}

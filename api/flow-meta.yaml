@@ -189,6 +189,101 @@ components:
             here when it has no flow to continue and no application URL to return to. Omitted when not
             set.
           example: "https://app.example.com"
+        myAccount:
+          $ref: '#/components/schemas/MyAccountMetadata'
+
+    MyAccountMetadata:
+      type: object
+      description: |
+        How My Account is laid out for the application, present only when type=APP and the application's
+        `metadata.myAccount` holds a valid layout. A layout that is not valid is left out, and My Account
+        shows its default tabs. The layout's text is merged into `i18n.translations.myaccount`: its text for the
+        resolved language, over its text for that language's base language (`en` for `en-GB`), over its text for
+        the system language (`en-US`).
+      required:
+        - tabs
+      properties:
+        tabs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MyAccountTab'
+
+    MyAccountTab:
+      type: object
+      description: A tab of My Account. A built-in tab (home, personal, security, devices) keeps its ID; a custom tab sets custom.
+      required:
+        - id
+        - sections
+      properties:
+        id:
+          type: string
+          description: The tab's ID. A custom tab's ID uses lowercase letters, digits and hyphens.
+          example: "security"
+        custom:
+          type: boolean
+          description: Whether the tab was added in the layout rather than built into My Account.
+        hidden:
+          type: boolean
+          description: Whether the tab is hidden. At least one tab is shown; My Account opens on the first one.
+        icon:
+          type: string
+          enum: [info, help, link, star, settings, bell]
+          description: The icon of a custom tab.
+        sections:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/MyAccountSection'
+
+    MyAccountSection:
+      type: object
+      description: |
+        One component in a tab. `home.*` cards go only in the home tab; profile, credential, passkeys and
+        sessions go in any other tab; a widget goes in any tab.
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: string
+          description: The section's ID, unique in the layout.
+          example: "passkeys"
+        type:
+          type: string
+          enum: [home.personalInfo, home.securityCheckup, home.devices, home.apps, profile, credential, passkeys, sessions, widget]
+        attribute:
+          type: string
+          description: The credential attribute a credential section changes, such as password or pin.
+          example: "password"
+        blocks:
+          type: array
+          description: The blocks a widget section shows, in order. Only a widget has blocks, and it has at least one.
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/MyAccountWidgetBlock'
+
+    MyAccountWidgetBlock:
+      type: object
+      description: |
+        One block of a widget. Its text is the layout's text for `sections.<section ID>.<block ID>`: a heading's or
+        text block's text, a button's label, or an image's description.
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: string
+          description: The block's ID, unique in its widget.
+          example: "title"
+        type:
+          type: string
+          enum: [heading, text, image, button]
+        url:
+          type: string
+          format: uri
+          description: The https address of an image, or the page a button opens. Only images and buttons have one.
+          example: "https://support.example.com"
 
     ApplicationMetadata:
       type: object

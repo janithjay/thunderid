@@ -3,7 +3,7 @@
 
 import {BuilderLayout, BuilderStaticPanel, DocumentTitle} from '@thunderid/components';
 import {useCapabilitiesContext, useProjectScope} from '@thunderid/contexts';
-import {useGetThemes, useGetTheme, type Stylesheet} from '@thunderid/design';
+import {useGetThemes, useGetTheme, type LayoutSidePanel, type Stylesheet} from '@thunderid/design';
 import {Autocomplete, Box, Button, IconButton, TextField, Tooltip, Typography, useColorScheme} from '@wso2/oxygen-ui';
 import {ArrowLeft, Crosshair, Layers, Save} from '@wso2/oxygen-ui-icons-react';
 import {useCallback, useEffect, useMemo, useRef, useState, type JSX} from 'react';
@@ -86,6 +86,19 @@ export default function LayoutBuilderPage(): JSX.Element {
   const handleStylesheetsChange = useCallback(
     (updated: Stylesheet[]) => {
       updateDraftLayout(['head', 'stylesheets'], updated);
+    },
+    [updateDraftLayout],
+  );
+
+  // The panel beside the sign-in form (layout-level, not per-screen)
+  const sidePanel = (draftLayout as Record<string, unknown> | null)?.['sidePanel'] as LayoutSidePanel | undefined;
+
+  // The side panel block being edited: picked in the panel's editor or clicked in the preview.
+  const [selectedSidePanelBlock, setSelectedSidePanelBlock] = useState<string | null>(null);
+
+  const handleSidePanelChange = useCallback(
+    (updated: LayoutSidePanel) => {
+      updateDraftLayout(['sidePanel'], updated);
     },
     [updateDraftLayout],
   );
@@ -297,7 +310,7 @@ export default function LayoutBuilderPage(): JSX.Element {
             <BuilderStaticPanel
               width={DesignUIConstants.RIGHT_PANEL_WIDTH}
               header={(() => {
-                if (handle === 'centered') return t('layouts.config.custom_css.title', 'Custom CSS');
+                if (handle === 'centered') return t('layouts.config.page.title', 'Sign-in page');
                 if (selectedScreen)
                   return t('layouts.builder.screen_header', 'Screen — {{name}}', {name: selectedScreen});
                 return t('layouts.builder.constraints.label', 'Constraints');
@@ -314,6 +327,10 @@ export default function LayoutBuilderPage(): JSX.Element {
                 stylesheets={stylesheets}
                 onStylesheetsChange={handleStylesheetsChange}
                 cssEditorRef={cssEditorRef}
+                sidePanel={handle === 'centered' ? sidePanel : undefined}
+                onSidePanelChange={handle === 'centered' ? handleSidePanelChange : undefined}
+                selectedSidePanelBlock={selectedSidePanelBlock}
+                onSelectSidePanelBlock={setSelectedSidePanelBlock}
               />
             </BuilderStaticPanel>
           }
@@ -335,6 +352,9 @@ export default function LayoutBuilderPage(): JSX.Element {
                 displayName={displayName ?? ''}
                 pageBackground={pageBackground}
                 stylesheets={stylesheets}
+                sidePanel={sidePanel}
+                selectedSidePanelBlock={selectedSidePanelBlock}
+                onSelectSidePanelBlock={setSelectedSidePanelBlock}
                 inspectorEnabled={inspectorEnabled}
                 onSelectSelector={handleSelectSelector}
                 toolbarEnd={toolbarEnd}

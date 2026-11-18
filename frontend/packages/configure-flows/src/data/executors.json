@@ -226,7 +226,7 @@
         "onIncomplete": ""
       },
       "properties": {
-        "relyingPartyId": "localhost",
+        "relyingPartyId": "",
         "relyingPartyName": "{{productName}}"
       }
     }
@@ -278,7 +278,7 @@
         "onIncomplete": ""
       },
       "properties": {
-        "relyingPartyId": "localhost",
+        "relyingPartyId": "",
         "relyingPartyName": "{{productName}}"
       }
     }

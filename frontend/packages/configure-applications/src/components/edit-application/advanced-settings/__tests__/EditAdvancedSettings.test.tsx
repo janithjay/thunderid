@@ -36,6 +36,7 @@ vi.mock('@thunderid/contexts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@thunderid/contexts')>()),
   useConfig: () => ({
     config: {
+      brand: {product_name: 'ThunderID'},
       client: {
         client_id: 'CONSOLE',
       },

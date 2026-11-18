@@ -63,6 +63,18 @@ export type {AuthCardLayoutProps} from './components/flow/AuthCardLayout';
 export {default as AuthPageLayout} from './components/flow/AuthPageLayout';
 export type {AuthPageLayoutProps} from './components/flow/AuthPageLayout';
 
+export {default as AuthSidePanel} from './components/flow/AuthSidePanel';
+export type {AuthSidePanelProps} from './components/flow/AuthSidePanel';
+export {
+  default as resolveSidePanel,
+  resolveSidePanelBlock,
+  isSidePanelImageUrl,
+  isSidePanelLinkUrl,
+  MAX_SIDE_PANEL_BLOCKS,
+  SIDE_PANEL_BLOCK_ATTRIBUTE,
+} from './utils/resolveSidePanel';
+export type {ResolvedSidePanel, ResolvedSidePanelBlock} from './utils/resolveSidePanel';
+
 export {default as FlowComponentRenderer} from './components/flow/FlowComponentRenderer';
 export {default as DateTimePickerField} from './components/DateTimePickerField';
 export type {DateTimePickerFieldProps} from './components/DateTimePickerField';

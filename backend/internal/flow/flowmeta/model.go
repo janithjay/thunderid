@@ -18,6 +18,15 @@ type FlowMetadataResponse struct {
 	Design                    DesignMetadata                     `json:"design"`
 	I18n                      I18nMetadata                       `json:"i18n"`
 	DefaultReturnURL          string                             `json:"defaultReturnUrl,omitempty"`
+	MyAccount                 *MyAccountMetadata                 `json:"myAccount,omitempty"`
+}
+
+// MyAccountMetadata is how My Account is laid out for the application, from its metadata: its tabs and the
+// components in them. Its text is merged into the response's translations under myAccountNamespace.
+type MyAccountMetadata struct {
+	Tabs []MyAccountTab `json:"tabs"`
+	// text is the layout's text by language, kept until the translations are resolved.
+	text map[string]map[string]string
 }
 
 // OUMetadata represents organization unit metadata.

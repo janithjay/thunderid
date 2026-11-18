@@ -286,7 +286,8 @@ func createHTTPServer(ctx context.Context, logger *log.Logger, cfg *config.Confi
 	// The Console frontend path is always excluded from the access log to keep it
 	// focused on API traffic. Additional prefixes can be excluded via log.access.exclude_paths.
 	handler := log.AccessLogHandler(logger, accessLogExcludePaths(cfg.Log.Access.ExcludePaths), securityMiddleware)
-	handler = middleware.SecurityHeadersMiddleware()(handler)
+	// The Control Plane serves no My Account.
+	handler = middleware.SecurityHeadersMiddleware("")(handler)
 	// Records the client every audit event a service publishes for the request carries.
 	handler = middleware.ClientMiddleware(handler)
 	requestMetadataMiddleware, err := middleware.RequestMetadataMiddleware(cfg.Server.TrustedProxies)
@@ -433,6 +434,13 @@ func registerStaticFileHandlers(ctx context.Context, logger *log.Logger, mux *ht
 	}
 }
 
+// setNoCacheHeaders tells the browser and any proxy not to cache the response.
+func setNoCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set(constants.CacheControlHeaderName, constants.CacheControlNoCacheComposite)
+	w.Header().Set(constants.PragmaHeaderName, constants.PragmaNoCache)
+	w.Header().Set(constants.ExpiresHeaderName, constants.ExpiresZero)
+}
+
 // createStaticFileHandler creates a handler for serving static files with SPA fallback.
 //
 // All filesystem access is performed through an os.Root anchored at `directory`, which
@@ -458,9 +466,7 @@ func createStaticFileHandler(routePrefix, directory string, logger *log.Logger) 
 		nonce := sysContext.GetCSPNonce(r.Context())
 		content = bytes.ReplaceAll(content, []byte(constants.CSPNoncePlaceholder), []byte(nonce))
 
-		w.Header().Set(constants.CacheControlHeaderName, constants.CacheControlNoCacheComposite)
-		w.Header().Set(constants.PragmaHeaderName, constants.PragmaNoCache)
-		w.Header().Set(constants.ExpiresHeaderName, constants.ExpiresZero)
+		setNoCacheHeaders(w)
 		w.Header().Set(constants.ContentTypeHeaderName, constants.ContentTypeHTML)
 		_, _ = w.Write(content)
 		return true
@@ -504,6 +510,12 @@ func createStaticFileHandler(routePrefix, directory string, logger *log.Logger) 
 			if serveIndex(w, r) {
 				return
 			}
+		}
+
+		// Another page beside index.html, such as My Account's preview page, names the same hashed assets, so it
+		// is never cached either: a cached copy would keep loading the assets of an earlier deployment.
+		if !strings.Contains(name, "/") && path.Ext(name) == ".html" {
+			setNoCacheHeaders(w)
 		}
 
 		// Serve the requested file or directory listing.

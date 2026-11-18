@@ -1612,6 +1612,20 @@ When you set the provider to `disabled`, also set `account_access.<category>.def
 
 A suspension placed before the switch still refuses sign-in, and it cannot be lifted while the provider is disabled, because the unsuspend flow fails. A user unsuspended before the switch also stays locked on every sign-in method, even with automatic locking off, because neither the unlock flow nor recovery can release that lock. Unsuspend and unlock these accounts before you disable the provider.
 
+## My Account Configuration
+
+Where the server serves My Account, the app where users manage their own account.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `my_account.path` | `myaccount` | The path segment My Account is served under, such as your company's name. Each page of My Account has its own address under it: `https://<host>/<path>/home`, `/personal`, `/security` and `/devices`. One segment of lowercase letters, digits and hyphens, not the path of an API or another app such as `gate` or `console`. The bootstrap sets the My Account application's redirect URIs from it, so set it before the first bootstrap, or update the application's redirect URIs when you change it |
+
+**Example:**
+```yaml
+my_account:
+  path: "mythunder"
+```
+
 ## Passkey Configuration
 
 WebAuthn/Passkey settings (typically defined in `deployment.yaml`).

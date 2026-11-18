@@ -11,6 +11,8 @@ import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router';
 import ItemCard from '../components/common/ItemCard';
 import SectionHeader from '../components/common/SectionHeader';
+import LayoutCreateDialog from '../components/layouts/LayoutCreateDialog';
+import LayoutDeleteDialog from '../components/layouts/LayoutDeleteDialog';
 import LayoutPresetThumbnail, {type LayoutPresetVariant} from '../components/layouts/LayoutPresetThumbnail';
 import LayoutThumbnail from '../components/layouts/LayoutThumbnail';
 import ThemeDeleteDialog from '../components/themes/ThemeDeleteDialog';
@@ -41,6 +43,8 @@ export default function DesignPage(): JSX.Element {
 
   const [showAllThemes, setShowAllThemes] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null);
+  const [creatingLayout, setCreatingLayout] = useState(false);
+  const [layoutDeleteTarget, setLayoutDeleteTarget] = useState<{id: string; name: string} | null>(null);
 
   const allLayouts = layoutsData?.layouts ?? [];
 
@@ -171,6 +175,19 @@ export default function DesignPage(): JSX.Element {
           title={t('layouts.section.title', 'Layouts')}
           count={allLayouts.length}
           icon={<LayoutTemplate size={18} />}
+          action={
+            can('design', 'create') &&
+            allLayouts.length > 0 && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<Plus size={16} />}
+                onClick={() => setCreatingLayout(true)}
+              >
+                {t('layouts.actions.add.label', 'Add layout')}
+              </Button>
+            )
+          }
         />
 
         {layoutsError ? (
@@ -196,6 +213,12 @@ export default function DesignPage(): JSX.Element {
                         // Ignore navigation errors
                       });
                     }}
+                    // The built-in layouts stay, so there is always one to start a new layout from.
+                    onDelete={
+                      isLayoutPresetVariant(layout.handle) || !can('design', 'delete')
+                        ? undefined
+                        : () => setLayoutDeleteTarget({id: layout.id, name: layout.displayName})
+                    }
                   />
                 </Grid>
               ))}
@@ -210,6 +233,28 @@ export default function DesignPage(): JSX.Element {
           </>
         )}
       </Box>
+
+      <LayoutCreateDialog
+        open={creatingLayout}
+        layouts={allLayouts}
+        projectId={projectId}
+        onClose={() => setCreatingLayout(false)}
+        onCreated={(layout) => {
+          setCreatingLayout(false);
+          (async () => {
+            await navigate(routes.design.layoutDetail(layout.id));
+          })().catch(() => {
+            // Ignore navigation errors
+          });
+        }}
+      />
+
+      <LayoutDeleteDialog
+        open={layoutDeleteTarget !== null}
+        layoutId={layoutDeleteTarget?.id ?? null}
+        layoutName={layoutDeleteTarget?.name ?? null}
+        onClose={() => setLayoutDeleteTarget(null)}
+      />
 
       <ThemeDeleteDialog
         open={deleteTarget !== null}

@@ -23,6 +23,11 @@ const render = (ui: ReactElement, options?: RenderOptions): RenderResult =>
 
 let translationLookup = (key: string): string => key;
 
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useConfig: () => ({config: {brand: {product_name: 'ThunderID'}}}),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => translationLookup(key),

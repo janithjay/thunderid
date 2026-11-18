@@ -502,5 +502,8 @@
   },
   "import": {
     "timeout_seconds": 120
+  },
+  "my_account": {
+    "path": "myaccount"
   }
 }

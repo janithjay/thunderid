@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/thunder-id/thunderid/internal/authn/passkey"
+	flowmgt "github.com/thunder-id/thunderid/internal/flow/mgt"
 	"github.com/thunder-id/thunderid/internal/inboundclient"
 	"github.com/thunder-id/thunderid/internal/system/middleware"
 )
@@ -16,8 +17,9 @@ func Initialize(
 	mux *http.ServeMux,
 	passkeyService passkey.PasskeyServiceInterface,
 	inboundClientService inboundclient.InboundClientServiceInterface,
+	flowMgtService flowmgt.FlowMgtServiceInterface,
 ) {
-	handler := newSelfPasskeyHandler(newSelfPasskeyService(passkeyService, inboundClientService))
+	handler := newSelfPasskeyHandler(newSelfPasskeyService(passkeyService, inboundClientService, flowMgtService))
 	registerRoutes(mux, handler)
 }
 

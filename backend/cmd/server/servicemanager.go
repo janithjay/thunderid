@@ -541,7 +541,7 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 	// flow services (which themselves depend on the enforcer) are initialized.
 	consentEnforcer.SetConsentService(initConsentService(ctx, logger, inboundClientService, auditBus))
 
-	selfpasskey.Initialize(mux, passkeyService, inboundClientService)
+	selfpasskey.Initialize(mux, passkeyService, inboundClientService, flowMgtService)
 
 	applicationService, applicationExporter, err := application.Initialize(
 		mux, mcpServer, entityService, inboundClientService, ouService, i18nService,

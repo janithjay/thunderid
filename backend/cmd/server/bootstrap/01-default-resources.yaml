@@ -6071,7 +6071,7 @@ inboundAuthConfig:
           - ouId
 ---
 # My Account, where users manage their own profile, password, passkeys and sessions. The server
-# serves the app from /myaccount, and the app's config.js names this ID, so it reads the theme, name
+# serves the app from /<my_account.path> (/myaccount by default), and the app's config.js names this ID, so it reads the theme, name
 # and logo set on this application. It uses the Console App flows: their sign-in is the default
 # one plus the SSO nodes, so it joins the user's SSO session and shows in their session list.
 # Registration is off since it is for existing users, and recovery is on.
@@ -6082,7 +6082,7 @@ name: My Account
 description: Where users manage their own account
 type: browser
 ouId: 01900000-0000-7000-8000-000000000001
-url: "{{ .PUBLIC_URL }}/myaccount"
+url: "{{ .PUBLIC_URL }}/{{ .MY_ACCOUNT_PATH }}"
 logoUrl: "avatar:shape=rounded,variant=anonymous_entity,content=key,colors=0"
 authFlowId: 01900000-0000-7000-8000-000000000068
 registrationFlowId: 01900000-0000-7000-8000-000000000069
@@ -6096,11 +6096,12 @@ inboundAuthConfig:
   - type: oauth2
     config:
       clientId: MY_ACCOUNT
-      # With the trailing slash: the server serves My Account from /myaccount/, and the app returns there.
+      # With the trailing slash: the server serves My Account from /<my_account.path>/, and the app returns
+      # there.
       redirectUris:
-        - "{{ .PUBLIC_URL }}/myaccount/"
+        - "{{ .PUBLIC_URL }}/{{ .MY_ACCOUNT_PATH }}/"
       postLogoutRedirectUris:
-        - "{{ .PUBLIC_URL }}/myaccount/"
+        - "{{ .PUBLIC_URL }}/{{ .MY_ACCOUNT_PATH }}/"
       grantTypes:
         - authorization_code
         - refresh_token

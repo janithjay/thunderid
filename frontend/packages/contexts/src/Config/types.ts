@@ -202,6 +202,13 @@ export interface BrandConfig {
    * @example [{ title: "Fast", description: "Sign in quickly.", icon: "assets/images/fast.svg" }]
    */
   slogan?: string | SloganItemConfig | SloganItemConfig[];
+
+  /**
+   * Text shown beside the logo, above the slogan, on Gate sign-in pages that no application design applies to.
+   * When omitted, the logo stands alone.
+   * @example "Acme Console"
+   */
+  logo_text?: string;
 }
 
 /**

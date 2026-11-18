@@ -2878,6 +2878,7 @@ paths:
                   - id: "AdC-ff_z-Z1gY2s6e_2A-g"
                     name: "Work laptop"
                   - id: "pQ3x-7Lm_Vb2kT9wE1rY0A"
+                relyingPartyId: "example.com"
         "401":
           description: Unauthorized - missing or invalid authentication token
           content:
@@ -2927,21 +2928,13 @@ paths:
         - Self
       summary: Start adding a passkey
       description: |
-        Starts adding a passkey for the signed-in user. The relying party ID must be the passkey
-        relying party ID of the application the token was issued to, or the host (or a parent domain
-        of the host) of one of that application's passkey origins. When the application sets no passkey
-        origins, the server's passkey origins apply. Without a relying party ID, the application's
-        passkey relying party ID is used.
+        Starts adding a passkey for the signed-in user. The passkey belongs to the relying party of the
+        passkey step in the sign-in flow of the application the token was issued to, so it signs the
+        user in to that application. The device must create it from one of the application's passkey
+        origins, or from one of the server's passkey origins when the application sets none. A request
+        body is not needed.
       security:
         - OAuth2: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SelfPasskeyRegistrationStartRequest'
-            example:
-              relyingPartyId: "example.com"
       responses:
         "200":
           description: Options for the device to create the passkey
@@ -2956,26 +2949,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
               examples:
-                relying-party-not-allowed:
-                  summary: Relying party not allowed
+                passkey-sign-in-not-configured:
+                  summary: Passkey sign-in not configured
                   value:
-                    code: "SPK-1003"
+                    code: "SPK-1005"
                     message:
-                      key: "error.selfpasskeyservice.relying_party_not_allowed"
-                      defaultValue: "Relying party not allowed"
+                      key: "error.selfpasskeyservice.passkey_sign_in_not_configured"
+                      defaultValue: "Passkey sign-in not configured"
                     description:
-                      key: "error.selfpasskeyservice.relying_party_not_allowed_description"
-                      defaultValue: "The relying party ID must be the application's passkey relying party ID, or match the host, or a parent domain, of an allowed passkey origin"
-                empty-relying-party-id:
-                  summary: Missing relying party ID
-                  value:
-                    code: "PSK-1002"
-                    message:
-                      key: "error.passkeyservice.empty_relying_party_id"
-                      defaultValue: "Empty relying party ID"
-                    description:
-                      key: "error.passkeyservice.empty_relying_party_id_description"
-                      defaultValue: "The relying party ID is required"
+                      key: "error.selfpasskeyservice.passkey_sign_in_not_configured_description"
+                      defaultValue: "The application's sign-in flow has no passkey step with a relying party ID, so a passkey cannot be added for it"
         "401":
           description: Unauthorized - missing or invalid authentication token
           content:
@@ -5984,13 +5967,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SelfPasskey'
-
-    SelfPasskeyRegistrationStartRequest:
-      type: object
-      properties:
         relyingPartyId:
           type: string
-          description: The domain the passkey belongs to. Optional when the application sets a passkey relying party ID.
+          description: The relying party the passkeys belong to, from the passkey step in the sign-in flow of the application the token was issued to. A client passes it to the device's passkey provider when it removes a passkey. Absent when that flow has no passkey step with a relying party ID.
           example: "example.com"
 
     SelfPasskeyRegistrationStartResponse:

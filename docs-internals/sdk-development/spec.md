@@ -1,7 +1,7 @@
 # SDK Development Specification
 
 - **Status:** Draft
-- **Version:** 0.10
+- **Version:** 0.12
 - **Related documents:**
   [threat-model.md](threat-model.md),
   [#5305](https://github.com/thunder-id/thunderid/issues/5305),
@@ -516,7 +516,7 @@ SDK MAY ship it, and one that does MUST follow this section.
 | Operation | Contract |
 |---|---|
 | List passkeys | Reads the collection. Returns the signed-in user's passkeys, each with its ID and, when it has one, its name. |
-| Start passkey registration | Sends the relying party ID to `register/start` under the collection. Returns the credential creation options and a session token for the registration. |
+| Start passkey registration | Calls `register/start` under the collection. Returns the credential creation options and a session token for the registration. |
 | Finish passkey registration | Sends the credential the platform created, the session token, and an optional name to `register/finish` under the collection. Returns the saved passkey. |
 | Remove passkey | Deletes one passkey of the signed-in user by its ID. |
 
@@ -526,9 +526,12 @@ Requirements:
    from the access token, so the SDK MUST NOT send a user identifier.
 2. The request URL comes from an explicit URL passed to the call, then the `usersMePasskeys`
    endpoint override, then `baseUrl` followed by `/users/me/passkeys`.
-3. The relying party ID is the one the caller supplies, or else the host the platform creates
-   the credential for: the page's host name in a browser. An SDK on a platform with no such host,
-   such as a native application, MUST take it from configuration.
+3. The server decides the relying party a passkey belongs to, from the passkey step in the sign-in
+   flow of the application the token was issued to, so a passkey added here signs the user in
+   there. The SDK MUST NOT send or derive a relying party ID, such as the page's host name, and
+   MUST NOT let a caller set one. When it removes a passkey, it signals the platform's passkey
+   provider with the `relyingPartyId` the list returned, and sends no signal when the list
+   returned none.
 4. The SDK MUST pass the creation options to the platform's passkey API unchanged and MUST NOT
    create a credential itself. The credential and the session token are submitted and
    discarded, as credentials are under [Security requirements](#security-requirements).
@@ -1314,6 +1317,9 @@ account stay the same.
   actions, then it draws them without any request of its own; given a custom UI on the passkeys
   component, when it saves a passkey, then the name is trimmed and an empty one left out, as in
   the built-in UI.
+- **AC11.9:** Given an account page on a host other than the sign-in page, when a passkey is
+  added, then `register/start` carries no relying party ID, and a removal signals the
+  `relyingPartyId` the list returned, or nothing when it returned none.
 
 ## Change log
 
@@ -1330,3 +1336,4 @@ account stay the same.
 | 0.9 | 2026-11-03 | Self user attribute verification added as an optional capability (R10). |
 | 0.10 | 2026-11-10 | The built-in profile waits for Verify after a contact save instead of starting verification by itself (AC10.6). |
 | 0.11 | 2026-11-16 | Self passkey management added as an optional capability (R11). |
+| 0.12 | 2026-11-24 | The server decides a self-added passkey's relying party, from the application's sign-in flow; the SDK sends none and signals removals with the relying party the list returns (R11.3, AC11.9). |

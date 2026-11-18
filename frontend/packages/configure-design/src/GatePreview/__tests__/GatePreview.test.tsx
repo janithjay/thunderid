@@ -1,7 +1,7 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {render, screen} from '@testing-library/react';
+import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {Theme} from '@thunderid/design';
 import {OxygenUIThemeProvider} from '@wso2/oxygen-ui';
@@ -156,6 +156,55 @@ describe('GatePreview', () => {
       const iframe = screen.getByTitle<HTMLIFrameElement>('Gate preview');
       const style = iframe.contentDocument?.querySelector('style');
       expect(style?.hasAttribute('nonce')).toBe(false);
+    });
+  });
+
+  describe('Page mode', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('writes the page at pageUrl into the frame and hands over its window, without waiting for a theme', async () => {
+      const fetchPage = vi.fn().mockResolvedValue(new Response('<!doctype html><p id="page">My Account</p>'));
+      vi.stubGlobal('fetch', fetchPage);
+      const onPageWindow = vi.fn();
+
+      renderWithThemeProvider(
+        <GatePreview theme={null} pageUrl="/console/preview.html" displayName="Acme" onPageWindow={onPageWindow} />,
+      );
+
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      const iframe = screen.getByTitle<HTMLIFrameElement>('Acme');
+      await waitFor(() => expect(onPageWindow).toHaveBeenCalledWith(iframe.contentWindow));
+      expect(fetchPage).toHaveBeenCalledTimes(1);
+      expect(fetchPage).toHaveBeenCalledWith('/console/preview.html', {credentials: 'same-origin'});
+      expect(iframe.contentDocument?.getElementById('page')?.textContent).toBe('My Account');
+    });
+
+    it('says the preview could not be loaded when the page does not answer', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', {status: 404})));
+      const onPageWindow = vi.fn();
+
+      renderWithThemeProvider(<GatePreview theme={null} pageUrl="/console/missing.html" onPageWindow={onPageWindow} />);
+
+      expect(await screen.findByText('The preview could not be loaded.')).toBeInTheDocument();
+      expect(onPageWindow).not.toHaveBeenCalled();
+    });
+
+    it('reports the color scheme it shows', () => {
+      vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => undefined)));
+      const onColorSchemeChange = vi.fn();
+
+      renderWithThemeProvider(
+        <GatePreview
+          theme={null}
+          pageUrl="/console/preview.html"
+          colorScheme="dark"
+          onColorSchemeChange={onColorSchemeChange}
+        />,
+      );
+
+      expect(onColorSchemeChange).toHaveBeenLastCalledWith('dark');
     });
   });
 

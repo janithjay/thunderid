@@ -538,7 +538,12 @@ export default function DashboardLayout({collapseSidebar = false}: DashboardLayo
 
       <AppShell.Footer>
         <Footer>
-          <Footer.Copyright>© {new Date().getFullYear()} The ThunderID Authors</Footer.Copyright>
+          <Footer.Copyright>
+            {t('common:footer.copyright', '© {{year}} {{productName}}', {
+              year: new Date().getFullYear(),
+              productName: config.brand.product_name,
+            })}
+          </Footer.Copyright>
           <Footer.Divider />
           <Footer.Version>{`${VERSION}`}</Footer.Version>
         </Footer>

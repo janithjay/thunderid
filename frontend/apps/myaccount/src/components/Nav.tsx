@@ -2,58 +2,72 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {Loading, SignedIn, SignedOut, SignInButton, UserDropdown, useTheme, useThunderID} from '@thunderid/react';
-import {useEffect, type ReactElement} from 'react';
+import {useEffect, useState, type ReactElement} from 'react';
 import {useTranslation} from 'react-i18next';
-import {Link, Outlet, useNavigate} from 'react-router';
-import AppLogo from './AppLogo';
-import ThemeToggle from './ThemeToggle';
-import useBrandTheme from '../hooks/useBrandTheme';
+import {Outlet, useNavigate} from 'react-router';
+import AppShell from './AppShell';
+import BrandLoading from './BrandLoading';
+import {getRuntimeConfig} from '../config/runtimeConfig';
+import type {BrandDesignTheme} from '../hooks/useBrandTheme';
 import useServerTranslations from '../i18n/useServerTranslations';
+import {readBrand, saveBrand, type CachedBrand} from '../utils/brandCache';
 
 export default function Nav(): ReactElement {
   const navigate = useNavigate();
   const {t} = useTranslation();
-  const {meta} = useThunderID();
-  const {colorScheme, toggleTheme} = useTheme();
-  const dark: boolean = colorScheme === 'dark';
+  const {isMetaLoading, meta} = useThunderID();
+  const {colorScheme} = useTheme();
+  const applicationId: string | undefined = getRuntimeConfig()?.client.application_id;
+  const [savedBrand] = useState<CachedBrand | null>(() => readBrand(applicationId));
   const appName: string = meta?.application?.name ?? t('app.title', 'My Account');
+  const designTheme = meta?.design?.theme as BrandDesignTheme | undefined;
+  const palette = designTheme?.colorSchemes?.[colorScheme]?.palette;
 
   useServerTranslations();
-  useBrandTheme(appName);
 
-  // On the root element only, so the brand colors set there (see useBrandTheme) are not shadowed by
-  // the dark palette redeclared on a descendant.
+  // Saves the brand this load brought, for the loading screen of the next visit.
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : '');
-  }, [dark]);
+    if (!meta?.application?.name) return;
+    saveBrand(applicationId, {
+      background: palette?.background?.default,
+      dark: colorScheme === 'dark',
+      logoUrl: meta.application.logoUrl,
+      name: meta.application.name,
+      primary: palette?.primary?.main,
+    });
+  }, [applicationId, colorScheme, meta, palette?.background?.default, palette?.primary?.main]);
+
+  // The application's layout and design come with its flow metadata. Until they arrive, show the loading
+  // screen, so a refresh never shows the default tabs, a hidden section or the default colors first.
+  if (isMetaLoading && !meta) {
+    return <BrandLoading brand={savedBrand} />;
+  }
 
   return (
-    <div className="app">
-      <nav className="nav">
-        <Link to="/" className="nav-logo">
-          <AppLogo className="brand-logo brand-logo--nav" name={appName} url={meta?.application?.logoUrl} />
-          <span className="wordmark-name">{appName}</span>
-        </Link>
-        <div className="nav-actions">
-          <ThemeToggle dark={dark} onToggle={toggleTheme} />
+    <AppShell
+      name={appName}
+      logoUrl={meta?.application?.logoUrl}
+      designTheme={designTheme}
+      actions={
+        <>
           <SignedIn>
             <UserDropdown
               showTriggerLabel
               manageProfileLabel={t('nav.manageProfile', 'Account')}
-              onManageProfile={() => void navigate('/account')}
+              onManageProfile={() => void navigate('/')}
             />
           </SignedIn>
           <SignedOut>
             <SignInButton />
           </SignedOut>
-        </div>
-      </nav>
-
+        </>
+      }
+    >
       <Loading>
         <div className="loading-screen">{t('app.loading', 'Loading')}</div>
       </Loading>
 
       <Outlet />
-    </div>
+    </AppShell>
   );
 }

@@ -1,10 +1,16 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {getCspNonce, type ColorSchemeOption, type Stylesheet, type Theme} from '@thunderid/design';
+import {
+  getCspNonce,
+  type ColorSchemeOption,
+  type LayoutSidePanel,
+  type Stylesheet,
+  type Theme,
+} from '@thunderid/design';
 import type {EmbeddedFlowComponent} from '@thunderid/react';
 import {Box, CircularProgress, IconButton, Tooltip, Typography, useColorScheme} from '@wso2/oxygen-ui';
-import {useCallback, useLayoutEffect, useRef, useState, type JSX, type ReactNode} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {useTranslation} from 'react-i18next';
 import IframeContent from './IframeContent';
@@ -78,6 +84,12 @@ export interface GatePreviewProps {
   pageBackground?: string;
   /** Custom stylesheets to inject into the isolated preview iframe. */
   stylesheets?: Stylesheet[];
+  /** The panel the layout sets beside the sign-in form, shown as the sign-in page shows it. */
+  sidePanel?: LayoutSidePanel;
+  /** The side panel block being edited, which the preview outlines. */
+  selectedSidePanelBlock?: string | null;
+  /** Called with a side panel block's ID when it is clicked in the preview. */
+  onSelectSidePanelBlock?: (blockId: string) => void;
   /** When true, enables the element inspector overlay inside the preview. */
   inspectorEnabled?: boolean;
   /** Callback when a CSS selector is picked via the inspector. */
@@ -126,6 +138,16 @@ export interface GatePreviewProps {
    * browser chrome, unlike toolbarStart/toolbarEnd which sit outside it.
    */
   footer?: ReactNode;
+  /**
+   * A page of this app to show in the frame instead of a sign-in screen, such as another app's preview. The page
+   * is fetched and written into the frame, so it runs in the frame's own window, with its own scripts and
+   * styles, and gets the same toolbar, chrome, viewports and zoom. `theme` and `mock` are not used with it.
+   */
+  pageUrl?: string;
+  /** Called with the frame's window once the page at `pageUrl` is written into it. */
+  onPageWindow?: (frame: Window) => void;
+  /** Called with the color scheme the preview shows, when it changes. */
+  onColorSchemeChange?: (scheme: 'light' | 'dark') => void;
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -143,6 +165,9 @@ export default function GatePreview({
   syncColorSchemeWithSystem = false,
   pageBackground = undefined,
   stylesheets = [],
+  sidePanel = undefined,
+  selectedSidePanelBlock = null,
+  onSelectSidePanelBlock = undefined,
   inspectorEnabled = false,
   onSelectSelector = undefined,
   onSubmit = undefined,
@@ -156,6 +181,9 @@ export default function GatePreview({
   toolbarEnd = undefined,
   toolbarPortal = undefined,
   footer = undefined,
+  pageUrl = undefined,
+  onPageWindow = undefined,
+  onColorSchemeChange = undefined,
 }: GatePreviewProps): JSX.Element {
   const {t} = useTranslation('design');
   const {mode, systemMode} = useColorScheme();
@@ -168,6 +196,13 @@ export default function GatePreview({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const dimensionsRef = useRef<HTMLSpanElement>(null);
   const [iframeDoc, setIframeDoc] = useState<Document | null>(null);
+  const [pageFailed, setPageFailed] = useState<boolean>(false);
+  // Read through refs so the frame's page is loaded once, not again when a parent passes new callbacks.
+  const pageUrlRef = useRef<string | undefined>(pageUrl);
+  const onPageWindowRef = useRef<typeof onPageWindow>(onPageWindow);
+  useEffect(() => {
+    onPageWindowRef.current = onPageWindow;
+  }, [onPageWindow]);
 
   // Callback ref: initializes the iframe document whenever the <iframe> mounts.
   // This handles the case where theme starts as null (loading spinner), so the
@@ -180,6 +215,26 @@ export default function GatePreview({
     if (!iframe) return;
     const doc = iframe.contentDocument;
     if (!doc) return;
+    const page: string | undefined = pageUrlRef.current;
+    if (page) {
+      // Written once: React Strict Mode calls this twice for the same frame.
+      if (iframe.dataset['page'] === page) return;
+      iframe.dataset['page'] = page;
+      fetch(page, {credentials: 'same-origin'})
+        .then((response: Response) => {
+          if (!response.ok) throw new Error(`The preview page answered ${response.status}.`);
+          return response.text();
+        })
+        .then((html: string) => {
+          doc.open();
+          doc.write(html);
+          doc.close();
+          if (iframe.contentWindow) onPageWindowRef.current?.(iframe.contentWindow);
+          setIframeDoc(doc);
+        })
+        .catch(() => setPageFailed(true));
+      return;
+    }
     if (doc.getElementById('root')) {
       setIframeDoc(doc);
       return;
@@ -207,6 +262,10 @@ export default function GatePreview({
     const next = ColorSchemeOptions[(currentIdx + 1) % ColorSchemeOptions.length];
     setMinimalColorScheme(next.id);
   };
+
+  useEffect(() => {
+    onColorSchemeChange?.(effectiveScheme);
+  }, [effectiveScheme, onColorSchemeChange]);
 
   const resolvedPageBackground =
     pageBackground ?? (toolbarVariant === 'minimal' ? NEUTRAL_CANVAS_BACKGROUND[effectiveScheme] : undefined);
@@ -252,7 +311,7 @@ export default function GatePreview({
     return () => observer.disconnect();
   }, [zoom, iframeDoc]);
 
-  if (theme === null) {
+  if (theme === null && !pageUrl) {
     return (
       <Box sx={{height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
         <CircularProgress size={32} />
@@ -417,18 +476,27 @@ export default function GatePreview({
                 }}
               />
             )}
+            {pageFailed && (
+              <Typography variant="body2" color="text.secondary" sx={{p: 3}}>
+                {t('themes.builder.preview.page_error', 'The preview could not be loaded.')}
+              </Typography>
+            )}
             <iframe
               ref={iframeCallbackRef}
-              title={t('themes.builder.preview.iframe_title', 'Gate preview')}
+              title={pageUrl && displayName ? displayName : t('themes.builder.preview.iframe_title', 'Gate preview')}
               style={{border: 'none', transformOrigin: 'top left', position: 'absolute', top: 0, left: 0}}
             />
-            {iframeDoc?.getElementById('root') &&
+            {!pageUrl &&
+              iframeDoc?.getElementById('root') &&
               createPortal(
                 <IframeContent
                   iframeDoc={iframeDoc}
                   colorScheme={effectiveScheme}
-                  theme={theme}
+                  theme={theme ?? undefined}
                   stylesheets={stylesheets}
+                  sidePanel={sidePanel}
+                  selectedSidePanelBlock={selectedSidePanelBlock}
+                  onSelectSidePanelBlock={onSelectSidePanelBlock}
                   pageBackground={resolvedPageBackground}
                   mock={mock}
                   inspectorEnabled={inspectorEnabled}

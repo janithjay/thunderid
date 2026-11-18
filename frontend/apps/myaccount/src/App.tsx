@@ -5,7 +5,7 @@ import {ProtectedRoute} from '@thunderid/react-router';
 import type {ReactElement} from 'react';
 import {createBrowserRouter, RouterProvider} from 'react-router';
 import Nav from './components/Nav';
-import {getRuntimeConfig} from './config/runtimeConfig';
+import {getAppBase} from './config/runtimeConfig';
 import AccountPage from './pages/AccountPage';
 import HomePage from './pages/HomePage';
 import './App.css';
@@ -15,9 +15,18 @@ const router = createBrowserRouter(
     {
       element: <Nav />,
       children: [
-        {path: '/', element: <HomePage />},
         {
-          path: '/account',
+          // There is no page for visitors who are not signed in: they go straight to sign-in.
+          path: '/',
+          element: (
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          // Each tab of My Account has its own address under the app's path: /home, /personal, /security.
+          path: '/:tabId',
           element: (
             <ProtectedRoute>
               <AccountPage />
@@ -27,7 +36,7 @@ const router = createBrowserRouter(
       ],
     },
   ],
-  {basename: getRuntimeConfig()?.client.base},
+  {basename: getAppBase()},
 );
 
 export default function App(): ReactElement {

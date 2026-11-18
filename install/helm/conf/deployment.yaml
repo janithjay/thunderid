@@ -398,6 +398,9 @@ gateway:
 direct_api:
   enabled: {{ .Values.configuration.directApi.enabled }}
 
+my_account:
+  path: {{ .Values.configuration.myAccount.path | quote }}
+
 passkey:
   allowed_origins:
   {{- range .Values.configuration.passkey.allowedOrigins }}

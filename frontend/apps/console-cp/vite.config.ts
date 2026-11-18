@@ -70,6 +70,12 @@ export default defineConfig(({command}) => ({
   publicDir: PUBLIC_DIR,
   build: {
     rollupOptions: {
+      // The Console, and My Account's preview, which the My Account editor loads into a frame of the
+      // Console's page so it runs in a window of its own.
+      input: {
+        main: resolve(currentDir, 'index.html'),
+        myAccountPreview: resolve(currentDir, 'myaccount-preview.html'),
+      },
       output: {
         manualChunks(id) {
           if (id.includes('node_modules/@mui/x-data-grid') || id.includes('node_modules/@mui/x-virtualizer')) {
@@ -144,6 +150,9 @@ export default defineConfig(({command}) => ({
   ],
   optimizeDeps: {
     include: ['lodash-es'],
+    // Pre-bundling gives every importer one copy of the SDK. My Account's preview is built with the Console but
+    // takes the SDK My Account depends on, so the SDK is left to resolve from each importer.
+    exclude: ['@thunderid/react'],
   },
   server: {
     port: PORT,

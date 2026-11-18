@@ -29,7 +29,7 @@ func (f fakeCSPReader) GetMergedConfig(_ context.Context, _ string) (any, *commo
 
 // serve runs the middleware against a single GET request for path and returns the recorder.
 func serve(path string) *httptest.ResponseRecorder {
-	handler := SecurityHeadersMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := SecurityHeadersMiddleware("/myaccount/")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	rr := httptest.NewRecorder()
@@ -144,7 +144,7 @@ func TestSecurityHeadersMiddleware_Nonce(t *testing.T) {
 
 	t.Run("the same nonce reaches both the header and the request context", func(t *testing.T) {
 		var fromContext string
-		handler := SecurityHeadersMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := SecurityHeadersMiddleware("/myaccount/")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fromContext = sysContext.GetCSPNonce(r.Context())
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -160,7 +160,7 @@ func TestSecurityHeadersMiddleware_Nonce(t *testing.T) {
 
 	t.Run("non-app paths get no nonce in context", func(t *testing.T) {
 		var fromContext string
-		handler := SecurityHeadersMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := SecurityHeadersMiddleware("/myaccount/")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fromContext = sysContext.GetCSPNonce(r.Context())
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -192,4 +192,27 @@ func TestSecurityHeadersMiddleware_ScopedToApps(t *testing.T) {
 		assert.Equal(t, serverconst.XFrameOptionsDeny, rr.Header().Get(serverconst.XFrameOptionsHeaderName),
 			"path %q should still get X-Frame-Options", path)
 	}
+}
+
+func TestSecurityHeadersMiddleware_MyAccountUnderItsConfiguredPath(t *testing.T) {
+	csp.InitializeConfigReader(fakeCSPReader{cfg: csp.PolicyConfig{
+		ReportOnly: boolPtr(false),
+		Paths: []csp.PathPolicy{
+			{Location: "/myaccount/", Directives: map[string][]string{"img-src": {"'self'", "https:"}}},
+		},
+	}})
+	t.Cleanup(func() { csp.InitializeConfigReader(nil) })
+	handler := SecurityHeadersMiddleware("/mythunderid/")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	policyOf := func(path string) string {
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		return rr.Header().Get(serverconst.ContentSecurityPolicyHeaderName)
+	}
+
+	// My Account takes the directives of the policy's /myaccount/ location under the path it is served from.
+	assert.Contains(t, policyOf("/mythunderid/home"), "img-src 'self' https:")
+	// The default path is an ordinary path when My Account is not served there.
+	assert.Empty(t, policyOf("/myaccount/home"))
 }

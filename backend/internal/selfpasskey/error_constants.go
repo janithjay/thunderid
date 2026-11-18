@@ -34,18 +34,19 @@ var (
 			DefaultValue: "Passkeys can only be managed with a token issued to the user directly",
 		},
 	}
-	// ErrorRelyingPartyNotAllowed is returned when the relying party ID does not match the allowed origins.
-	ErrorRelyingPartyNotAllowed = tidcommon.ServiceError{
+	// ErrorPasskeySignInNotConfigured is returned when the app's sign-in flow has no passkey step that names
+	// a relying party, so a passkey added here could not sign the user in.
+	ErrorPasskeySignInNotConfigured = tidcommon.ServiceError{
 		Type: tidcommon.ClientErrorType,
-		Code: "SPK-1003",
+		Code: "SPK-1005",
 		Error: tidcommon.I18nMessage{
-			Key:          "error.selfpasskeyservice.relying_party_not_allowed",
-			DefaultValue: "Relying party not allowed",
+			Key:          "error.selfpasskeyservice.passkey_sign_in_not_configured",
+			DefaultValue: "Passkey sign-in not configured",
 		},
 		ErrorDescription: tidcommon.I18nMessage{
-			Key: "error.selfpasskeyservice.relying_party_not_allowed_description",
-			DefaultValue: "The relying party ID must be the application's passkey relying party ID, or match the " +
-				"host, or a parent domain, of an allowed passkey origin",
+			Key: "error.selfpasskeyservice.passkey_sign_in_not_configured_description",
+			DefaultValue: "The application's sign-in flow has no passkey step with a relying party ID, " +
+				"so a passkey cannot be added for it",
 		},
 	}
 	// ErrorInvalidRequestFormat is returned when the request body cannot be read.

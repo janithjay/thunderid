@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {OAuth2Logo, SettingsCard} from '@thunderid/components';
+import {useConfig} from '@thunderid/contexts';
 import {useThunderID} from '@thunderid/react';
 import {
   Alert,
@@ -122,6 +123,7 @@ export default function OAuth2ConfigSection({
 }: OAuth2ConfigSectionProps) {
   const {t} = useTranslation();
   const {discovery} = useThunderID();
+  const {config} = useConfig();
 
   const [redirectUris, setRedirectUris] = useState<string[]>(() => oauth2Config?.redirectUris ?? []);
   const [uriErrors, setUriErrors] = useState<Record<number, string>>({});
@@ -474,7 +476,7 @@ export default function OAuth2ConfigSection({
           <FormControl fullWidth required={hasAuthorizationCodeGrant}>
             <FormLabel htmlFor="redirect-uris-section">{t('applications:edit.general.redirectUris.title')}</FormLabel>
             <Typography variant="caption" color="text.secondary" sx={{display: 'block', mb: 2}}>
-              {t('applications:edit.general.redirectUris.description')}
+              {t('applications:edit.general.redirectUris.description', {productName: config.brand.product_name})}
             </Typography>
 
             <Stack spacing={2} id="redirect-uris-section">

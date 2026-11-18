@@ -39,6 +39,7 @@ const items: {
 
 export default function SignInSlogan(): JSX.Element {
   const slogan = window.__THUNDERID_RUNTIME_CONFIG__?.brand?.slogan;
+  const logoText = window.__THUNDERID_RUNTIME_CONFIG__?.brand?.logo_text;
   let configuredItems: SloganItemConfig[] = [];
   if (typeof slogan === 'string') {
     configuredItems = slogan.trim() !== '' ? [{title: slogan}] : [];
@@ -68,12 +69,30 @@ export default function SignInSlogan(): JSX.Element {
     <Stack
       direction="column"
       alignItems="start"
-      gap={5}
+      gap={8}
       maxWidth={450}
       display={{xs: 'none', md: 'flex'}}
       className={cn('SignInSlogan--root')}
     >
-      <ColorSchemeImage src={logoSrc} alt={{light: 'Logo (Light)', dark: 'Logo (Dark)'}} height={50} width="auto" />
+      <Stack direction="row" alignItems="center" gap={3}>
+        <ColorSchemeImage src={logoSrc} alt={{light: 'Logo (Light)', dark: 'Logo (Dark)'}} height={50} width="auto" />
+        {logoText && (
+          // Set bold and in the brand color, as a logo's lettering is, in white on dark backgrounds as the
+          // inverted logo is.
+          <Typography
+            variant="h3"
+            component="p"
+            sx={(theme) => ({
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+              color: 'primary.main',
+              ...theme.applyStyles('dark', {color: 'common.white'}),
+            })}
+          >
+            {logoText}
+          </Typography>
+        )}
+      </Stack>
       <Stack sx={{flexDirection: 'column', alignSelf: 'center', gap: 4}}>
         {displayItems.map((item) => (
           <Stack key={item.title} direction="row" sx={{gap: 2}}>

@@ -62,8 +62,8 @@ func printBootstrapSummary() {
 
 // parseBootstrapOptions parses the bootstrap subcommand flags and exports the admin
 // credentials and public URL to the environment, so the bundle's
-// `{{ .ADMIN_USERNAME }}` / `{{ .ADMIN_PASSWORD }}` / `{{ .PUBLIC_URL }}` placeholders
-// resolve at import time. Flags override the environment. The admin username defaults
+// `{{ .ADMIN_USERNAME }}` / `{{ .ADMIN_PASSWORD }}` / `{{ .PUBLIC_URL }}` / `{{ .MY_ACCOUNT_PATH }}`
+// placeholders resolve at import time. Flags override the environment. The admin username defaults
 // to "admin". The admin password has no default and no generation logic here: this
 // subcommand never invents security material on its own, so callers (setup.sh/setup.ps1
 // generate one if needed) must supply a non-empty ADMIN_PASSWORD, or bootstrap fails.
@@ -88,6 +88,8 @@ func parseBootstrapOptions(serverHome string, args []string) (bootstrap.Options,
 
 	setEnv("PUBLIC_URL", firstNonEmpty(os.Getenv("PUBLIC_URL"),
 		config.GetServerURL(&config.GetServerRuntime().Config.Server)))
+	// The path the Data Plane serves My Account under, for the My Account application's URL and redirect URIs.
+	setEnv("MY_ACCOUNT_PATH", config.GetServerRuntime().Config.MyAccount.Path)
 	// The bundle ranges over CONSOLE_REDIRECT_URIS, which buildArrayFromEnvVars
 	// reconstructs from the indexed CONSOLE_REDIRECT_URIS_0, _1, ... variables.
 	idx := 0

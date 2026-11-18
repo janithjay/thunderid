@@ -32,6 +32,8 @@ export interface UpdateThemeRequest {
 export interface CreateLayoutRequest {
   handle: string;
   displayName: string;
+  /** ID of the project the layout belongs to. Required on the Control Plane. */
+  projectId?: string;
   layout: LayoutConfig;
 }
 

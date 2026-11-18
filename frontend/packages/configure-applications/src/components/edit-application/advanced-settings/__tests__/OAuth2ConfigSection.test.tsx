@@ -7,6 +7,11 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {OAuth2Config} from '../../../../models/oauth';
 import OAuth2ConfigSection from '../OAuth2ConfigSection';
 
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useConfig: () => ({config: {brand: {product_name: 'ThunderID'}}}),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,

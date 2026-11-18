@@ -1,0 +1,138 @@
+/* Copyright 2026 The ThunderID Authors */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* The marks the Console's preview adds. A region takes no part in the layout, so the page is laid out
+   exactly as My Account lays it out. */
+.preview-region {
+  display: contents;
+}
+
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483647;
+}
+
+.preview-outline {
+  position: fixed;
+  border: 2px dashed;
+  border-radius: 8px;
+}
+
+.preview-outline--selected {
+  border-style: solid;
+}
+
+.preview-outline-label {
+  position: absolute;
+  top: -11px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #ffffff;
+  font:
+    600 11px/16px system-ui,
+    sans-serif;
+  white-space: nowrap;
+}
+
+/* Every tab and component selects on click, so it points like a link. */
+.preview-region * {
+  cursor: pointer;
+}
+
+/* The space at the end of a page that adds a component, drawn as the flow builder's add space. */
+.preview-add {
+  position: relative;
+  margin-top: 16px;
+}
+
+.preview-add-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 56px;
+  border: 2px dashed;
+  border-radius: 12px;
+  background: transparent;
+  font:
+    600 14px/20px system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+/* Under the menu, the space that adds a menu item is the height of a menu item. */
+.preview-add--compact {
+  margin-top: 8px;
+}
+
+.preview-add--compact .preview-add-button {
+  min-height: 40px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.preview-add-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* While a tab or component is dragged: the space it lands in, and its name under the pointer. */
+.preview-drop-space {
+  position: fixed;
+  border: 2px dashed;
+  border-radius: 8px;
+}
+
+.preview-drag-label {
+  position: fixed;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #ffffff;
+  font:
+    600 11px/16px system-ui,
+    sans-serif;
+  white-space: nowrap;
+  transform: translate(12px, 12px);
+}
+
+/* A draggable tab or component shows it can be picked up. */
+.preview-editable .preview-region * {
+  cursor: grab;
+}
+
+.preview-dragging,
+.preview-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* A tab or component hidden from users stays in the preview, faded, with a Hidden mark from the overlay. */
+.preview-region--hidden > *,
+.preview-page--hidden {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+/* A hidden component on a hidden tab's page is dimmed once, with the page. */
+.preview-page--hidden .preview-region--hidden > * {
+  opacity: 1;
+  filter: none;
+}
+
+.preview-hidden-mark {
+  position: fixed;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid #c4c4c4;
+  background: #ffffff;
+  color: #4b4b4b;
+  font:
+    600 11px/16px system-ui,
+    sans-serif;
+  white-space: nowrap;
+  transform: translate(-100%, 0);
+}

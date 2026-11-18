@@ -29,6 +29,11 @@ vi.mock('@thunderid/configure-organization-units', async (importOriginal) => ({
 
 let translationLookup = (key: string): string => key;
 
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useConfig: () => ({config: {brand: {product_name: 'ThunderID'}}}),
+}));
+
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),
   useTranslation: () => ({

@@ -1,6 +1,7 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
+import {SIDE_PANEL_BLOCK_ATTRIBUTE} from '@thunderid/design';
 import {getCnPrefix} from '@thunderid/utils';
 import {Box, Typography} from '@wso2/oxygen-ui';
 import {useEffect, useRef, useState, type JSX, type ReactNode} from 'react';
@@ -100,6 +101,9 @@ export default function ElementInspector({
     };
 
     const handleClick = (e: MouseEvent): void => {
+      // A click on a side panel block selects that block for editing, which the panel handles itself.
+      if ((e.target as HTMLElement).closest?.(`[${SIDE_PANEL_BLOCK_ATTRIBUTE}]`)) return;
+
       e.preventDefault();
       e.stopPropagation();
 

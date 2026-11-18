@@ -196,21 +196,19 @@ A signed-in user can add, list, and remove their own passkeys through the `/user
 |---|---|---|
 | `POST` | `/users/me/passkeys/register/start` | Start adding a passkey. Returns WebAuthn creation options and a session token. |
 | `POST` | `/users/me/passkeys/register/finish` | Verify and save the passkey the device created. Returns `201` with the passkey `id` and `name`. |
-| `GET` | `/users/me/passkeys` | List the user's passkeys as `{ "passkeys": [{ "id", "name" }] }`. |
+| `GET` | `/users/me/passkeys` | List the user's passkeys as `{ "passkeys": [{ "id", "name" }], "relyingPartyId" }`. `relyingPartyId` is the relying party they belong to, which a client needs when it tells the device a passkey was removed. |
 | `DELETE` | `/users/me/passkeys/{id}` | Remove one of the user's passkeys. Returns `204`. |
 
 1) **Start registration.**
 
 ```bash
 curl -k -X POST https://localhost:8090/users/me/passkeys/register/start \
-  -H "Authorization: Bearer <access-token>" \
-  -H "Content-Type: application/json" \
-  -d '{ "relyingPartyId": "example.com" }'
+  -H "Authorization: Bearer <access-token>"
 ```
 
-- `relyingPartyId` must be the application's passkey relying party ID, or the host (or a parent domain of the host) of one of the application's passkey origins. The application is the one the access token was issued to.
-- When the application sets no passkey origins, the server-level `passkey.allowed_origins` apply.
-- You can leave out `relyingPartyId` when the application sets `passkeyRelyingPartyId`.
+- The passkey belongs to the relying party ID of the passkey step in the sign-in flow of the application the access token was issued to. A passkey added here therefore signs the user in to that application, wherever the account page that adds it runs.
+- If the application's sign-in flow has no passkey step with a relying party ID, the request is refused. Add the passkey step to the flow first.
+- The device must create the passkey from one of the application's passkey origins. When the application sets none, the server-level `passkey.allowed_origins` apply.
 
 2) **Create the credential on the device**, using `navigator.credentials.create()` in a browser or the platform passkey API in a mobile app.
 
@@ -252,7 +250,7 @@ A passkey belongs to one domain, the relying party ID. Mobile platforms only let
 
 - **Android:** Add the app's origin to `passkeyAllowedOrigins`. An Android app reports `android:apk-key-hash:` followed by the base64url-encoded SHA-256 fingerprint of its signing certificate, without padding. Each signing certificate (debug, release) has its own origin, so list one for every build you use.
 - **iOS:** An iOS app reports `https://<relying-party-id>` as its origin. Add it to `passkeyAllowedOrigins`.
-- Set `passkeyRelyingPartyId` to the relying party domain, such as `example.com`. An Android app has no web origin to match the relying party ID against, so self-service registration accepts this domain instead. The mobile app can then leave `relyingPartyId` out of the start request.
+- Set the relying party ID of the passkey step in the application's sign-in flow to the relying party domain, such as `example.com`. Passkeys the app adds and passkey sign-in both use it.
 
 To compute the Android origin from a signing certificate fingerprint:
 
