@@ -9,6 +9,7 @@
 # build.sh's dev run). Named to sort after 01-default-resources.yaml, whose flows it references.
 resource_type: application
 id: 01900000-0000-7000-8000-0000000000f1
+projectId: 01900000-0000-7000-8000-000000000002
 name: Admin Console
 description: Admin console of the Data Plane
 type: browser

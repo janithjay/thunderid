@@ -48,13 +48,14 @@ function Set-GatewayKeyTrust {
     }
 }
 
-# Set-ConsoleUrls exports the console redirect URIs the bootstrap resources are templated with:
-# CP_CONSOLE_URL for the CP_CONSOLE application on auth-dp, and ADMIN_CONSOLE_URL for the
-# ADMIN_CONSOLE application on the Data Plane and the Control Plane. Call it before the first
-# plane's setup runs, since auth-dp's bootstrap already needs CP_CONSOLE_URL.
+# Set-ConsoleUrls exports the redirect URIs the bootstrap resources are templated with:
+# CP_CONSOLE_URL for the CP_CONSOLE application on auth-dp, and ADMIN_CONSOLE_URL and MY_ACCOUNT_URL
+# for the ADMIN_CONSOLE and MY_ACCOUNT applications on the Data Plane and the Control Plane. Call
+# it before the first plane's setup runs, since auth-dp's bootstrap already needs CP_CONSOLE_URL.
 function Set-ConsoleUrls {
     $env:CP_CONSOLE_URL = "https://localhost:$CP_PORT/console"
     $env:ADMIN_CONSOLE_URL = "https://localhost:$DP_PORT/console"
+    $env:MY_ACCOUNT_URL = "https://localhost:$DP_PORT/myaccount"
 }
 
 # Set-DpCaCertificate exports DP_CA_CERTIFICATE, the managed Data Plane's certificate, which the
@@ -92,9 +93,10 @@ function Invoke-DpPut {
 # gateway. Two come from the Control Plane's own bootstrap, which runs while the Data Plane is not
 # up to capture them to:
 #
-#   - the ClientID and redirect URIs of the ADMIN_CONSOLE application
-#     (quickstart/bootstrap/dp-cp/04-quickstart-admin-console.yaml). The redirect URIs are a list,
-#     so the variable holds a JSON array;
+#   - the ClientID and redirect URIs of the ADMIN_CONSOLE and MY_ACCOUNT applications
+#     (quickstart/bootstrap/dp-cp/04-quickstart-admin-console.yaml and
+#     05-quickstart-my-account.yaml). The redirect URIs are a list, so the variable holds a JSON
+#     array;
 #   - the identifier of the System resource server, which a gateway holds for itself and is
 #     the Data Plane's own MCP URL;
 #   - the Service Desk Admin's password. A version carries that user to the Data Plane like any
@@ -117,6 +119,9 @@ function Set-DpValues {
     Invoke-DpPut -Path "/variables/APPLICATION__019000000000700080000000000000F1__CLIENT_ID" -Value "ADMIN_CONSOLE"
     Invoke-DpPut -Path "/variables/APPLICATION__019000000000700080000000000000F1__REDIRECT_URIS" `
         -Value (ConvertTo-Json -Compress -InputObject @($env:ADMIN_CONSOLE_URL))
+    Invoke-DpPut -Path "/variables/APPLICATION__019000000000700080000000000000F7__CLIENT_ID" -Value "MY_ACCOUNT"
+    Invoke-DpPut -Path "/variables/APPLICATION__019000000000700080000000000000F7__REDIRECT_URIS" `
+        -Value (ConvertTo-Json -Compress -InputObject @("$($env:MY_ACCOUNT_URL)/"))
     Invoke-DpPut -Path "/variables/RESOURCE_SERVER__01900000000070008000000000000020__IDENTIFIER" -Value "https://localhost:$DP_PORT/mcp"
     Invoke-DpPut -Path "/secrets/USER__019000000000700080000000000000F3__PASSWORD" `
         -Value $env:SERVICE_DESK_PASSWORD

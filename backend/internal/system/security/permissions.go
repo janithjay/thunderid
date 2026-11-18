@@ -44,6 +44,7 @@ var publicPaths = []string{
 	"/.well-known/oauth-protected-resource",
 	"/gate/**",
 	"/console/**",
+	"/myaccount/**",
 	"/error/**",
 	"/design/resolve/**",
 	"/i18n/languages",

@@ -25,6 +25,23 @@ value:
         worker-src:
           - "'self'"
           - "blob:" # Monaco instantiated web workers.
+    - location: "/myaccount/"
+      directives:
+        # The SDK's <style> tags carry the per-request nonce, which is appended to this directive.
+        style-src-elem:
+          - "'self'"
+        # Governs inline style="" attributes that can't carry a nonce.
+        style-src-attr:
+          - "'self'"
+          - "'unsafe-inline'"
+        # Application logos are URLs on any host, shown in the session list and the top bar.
+        img-src:
+          - "'self'"
+          - "data:"
+          - "https:"
+        font-src:
+          - "'self'"
+          - "data:"
     - location: "/gate/"
       directives:
         style-src-elem:

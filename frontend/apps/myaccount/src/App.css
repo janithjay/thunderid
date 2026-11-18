@@ -1,0 +1,641 @@
+/* Copyright 2026 The ThunderID Authors */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Design adapted from the ThunderID React quickstart. */
+
+/* ─── Design tokens ─────────────────────────────────────────────── */
+/* Every token follows the design of the My Account application, as the Control Plane sets it: the
+   SDK writes the application's theme to the page root as --thunderid-* variables, for the current
+   color scheme, and these tokens read them. The values after each variable are the fallbacks for a
+   page without the SDK's theme. The page background is the one exception: the SDK has no default
+   for it, so hooks/useBrandTheme.ts sets --brand-bg from the theme, and the fallbacks apply until
+   a theme sets one. Every tint, hover and illustration is mixed from these tokens. */
+:root {
+  --color-primary: var(--thunderid-color-primary-main, #1a73e8);
+  --color-on-primary: var(--thunderid-color-primary-contrastText, #ffffff);
+  --color-success: var(--thunderid-color-success-main, #1e8e3e);
+  --color-warning: var(--thunderid-color-warning-main, #d97706);
+  --color-card: var(--thunderid-color-background-surface, #ffffff);
+  --color-border: var(--thunderid-color-border, #dadce0);
+  --color-text: var(--thunderid-color-text-primary, #202124);
+  --color-muted: var(--thunderid-color-text-secondary, #5f6368);
+  --color-navy: var(--color-text);
+  --color-bg: var(--brand-bg, #f8f9fa);
+  --color-primary-soft: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color-primary-faint: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  --color-success-soft: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --color-warning-soft: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  --nav-bg: color-mix(in srgb, var(--color-bg) 92%, transparent);
+  --shadow-card: var(--thunderid-shadow-small, 0 4px 18px color-mix(in srgb, var(--color-text) 6%, transparent));
+  --radius-sm: var(--thunderid-border-radius-small, 4px);
+  --radius-md: var(--thunderid-border-radius-medium, 8px);
+  --radius-lg: var(--thunderid-border-radius-large, 16px);
+  --radius-card: var(--radius-lg);
+  --radius-btn: var(--radius-md);
+  --font-body: var(
+    --thunderid-typography-fontFamily,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
+  --nav-height: 52px;
+  --transition: 0.2s ease;
+}
+
+[data-theme='dark'] {
+  --color-bg: var(--brand-bg, #121212);
+}
+
+/* ─── App shell ─────────────────────────────────────────────────── */
+.app {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+/* ─── Nav ───────────────────────────────────────────────────────── */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+  z-index: 100;
+  gap: 12px;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  flex: 1;
+}
+
+.wordmark-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--color-text);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Loading ───────────────────────────────────────────────────── */
+.loading-screen {
+  min-height: calc(100vh - var(--nav-height));
+  margin-top: var(--nav-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  font-size: 15px;
+}
+
+/* ─── Hero ──────────────────────────────────────────────────────── */
+.hero {
+  min-height: calc(100vh - var(--nav-height));
+  margin-top: var(--nav-height);
+  padding: 48px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-inner {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
+}
+
+.hero-mark {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 28px;
+}
+.hero-badge-line {
+  display: block;
+  height: 1px;
+  width: 24px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+.hero-title {
+  margin: 0 0 18px;
+}
+
+.hero-subtitle {
+  max-width: 420px;
+  margin: 0 auto 36px;
+}
+
+.hero-ctas {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 52px;
+}
+
+/* ─── Account page (Google Account-style left-nav layout) ─────────── */
+.account-page {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - var(--nav-height));
+  margin-top: var(--nav-height);
+}
+
+.account-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  padding: 40px 24px;
+  position: sticky;
+  top: var(--nav-height);
+}
+
+.account-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Scoped under .account-nav so these layout rules outweigh the SDK button's own, which load after this file. */
+.account-nav .account-nav-item {
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 11px 16px;
+  white-space: nowrap;
+}
+
+/* The selected tab keeps a tint of the theme's primary color, beyond the SDK button's primary text. */
+.account-nav .account-nav-item--active,
+.account-nav .account-nav-item--active:hover {
+  background: var(--color-primary-soft);
+}
+
+.account-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  padding: 40px 32px 80px;
+  border-left: 1px solid var(--color-border);
+}
+
+.account-content-inner {
+  width: 100%;
+  max-width: 720px;
+}
+
+.account-content-inner:has(.home) {
+  max-width: 880px;
+}
+
+/* UserProfile's `min-width: 600px` (a floor meant to keep the field grid from getting
+   cramped in other contexts) fights this page's own responsive layout, refusing to shrink
+   below 600px even when the viewport is narrower. The Security/Home boxes have no such floor
+   and already shrink fluidly with their container, so match that here. */
+.account-content .thunderid-user-profile {
+  min-width: 0;
+}
+
+.account-content-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 32px;
+}
+
+/* ─── Home (Google Account-style overview) ─────────────────────── */
+.home {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 8px 0 36px;
+}
+
+.home-hero-avatar {
+  border-radius: 50%;
+  padding: 4px;
+  background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 30%, transparent));
+  margin-bottom: 20px;
+}
+
+.home-hero-avatar > * {
+  display: block;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--color-bg);
+}
+
+.home-hero-subtitle {
+  max-width: 460px;
+  margin: 0 0 18px;
+}
+
+.home-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.home-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+  font-size: 12.5px;
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.home-card {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.home-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.home-card-summary {
+  margin-top: 6px;
+}
+
+/* Scoped under .home-card so it outweighs the SDK button's centring, which loads after this file. */
+.home-card .home-card-footer {
+  justify-content: space-between;
+}
+
+.home-card-footer svg {
+  transition: transform var(--transition);
+}
+
+.home-card-footer:hover svg {
+  transform: translateX(3px);
+}
+
+/* Illustrations */
+.home-illustration {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.home-illustration-disc {
+  fill: var(--color-primary);
+  fill-opacity: 0.14;
+}
+
+.home-illustration-paper {
+  fill: var(--color-card);
+  stroke: var(--color-primary);
+  stroke-width: 2;
+}
+
+.home-illustration-ink {
+  fill: var(--color-primary);
+  stroke: var(--color-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.home-illustration-line {
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Personal info fields */
+.home-fields {
+  margin: 0;
+}
+
+.home-field {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 13.5px;
+}
+
+.home-field dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.home-field dd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.home-truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-muted {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.home-pill {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.home-pill--ok {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.home-pill--warn {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+/* Security checkup */
+.home-checkup {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-checkup-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.home-checkup-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--color-on-primary);
+}
+
+.home-checkup-icon--ok {
+  background: var(--color-success);
+}
+
+.home-checkup-icon--warn {
+  background: var(--color-warning);
+}
+
+.home-checkup-text,
+.home-list-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.home-checkup-label,
+.home-list-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.home-checkup-detail,
+.home-list-detail {
+  font-size: 12.5px;
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Devices and apps */
+.home-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.home-list-icon,
+.home-app-logo {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.home-app-logo {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.app-logo-glyph {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.home-app-logo img,
+.brand-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The application's logo, from its design on the server, or its initials when it has none. */
+.brand-logo {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-weight: 700;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.brand-logo--nav {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+.brand-logo--hero {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  font-size: 24px;
+}
+.brand-logo--hero .app-logo-glyph {
+  font-size: 36px;
+}
+
+.home-badge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Loading placeholder */
+.home-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.home-skeleton-row {
+  display: block;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--color-border) 0%, transparent 50%, var(--color-border) 100%);
+  background-size: 200% 100%;
+  animation: home-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes home-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-skeleton-row {
+    animation: none;
+  }
+}
+
+.home-footnote {
+  margin: 28px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+
+@media (max-width: 960px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.account-security-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .account-page {
+    flex-direction: column;
+  }
+  .account-sidebar {
+    width: 100%;
+    position: static;
+    padding: 20px 16px 8px;
+  }
+  .account-nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .account-content {
+    max-width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    padding: 24px 20px 60px;
+  }
+}
